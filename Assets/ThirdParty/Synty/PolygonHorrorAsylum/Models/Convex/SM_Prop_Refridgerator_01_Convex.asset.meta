@@ -1,0 +1,15 @@
+fileFormatVersion: 2
+guid: ea2cd059f5078774ba4bb2e27cdc5747
+NativeFormatImporter:
+  externalObjects: {}
+  mainObjectFileID: 11400000
+  userData: 
+  assetBundleName: 
+  assetBundleVariant: 
+AssetOrigin:
+  serializedVersion: 1
+  productId: 0
+  packageName: POLYGON Horror Asylum
+  packageVersion: 1.0.3
+  assetPath: Assets/ThirdParty/Synty/PolygonHorrorAsylum/Models/Convex/SM_Prop_Refridgerator_01_Convex.asset
+  uploadId: 0

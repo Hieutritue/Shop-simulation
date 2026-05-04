@@ -1,0 +1,15 @@
+fileFormatVersion: 2
+guid: 54215d0c1a2d3d047a23dcd70992108e
+NativeFormatImporter:
+  externalObjects: {}
+  mainObjectFileID: 2100000
+  userData: 
+  assetBundleName: 
+  assetBundleVariant: 
+AssetOrigin:
+  serializedVersion: 1
+  productId: 0
+  packageName: POLYGON Horror Carnival
+  packageVersion: 1.1.0
+  assetPath: Assets/ThirdParty/PolygonHorrorCarnival/Materials/Alts/PolygonHorrorCarnival_Mat_01_A.mat
+  uploadId: 0
