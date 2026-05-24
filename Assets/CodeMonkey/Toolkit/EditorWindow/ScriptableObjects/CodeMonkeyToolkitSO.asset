@@ -14,7 +14,7 @@ MonoBehaviour:
   m_EditorClassIdentifier: 
   currentVersion: 1.0.2
   subtype: toolkit
-  lastShownTimestamp: 1777796284
+  lastShownTimestamp: 1779289945
   toolSOList:
   - {fileID: 11400000, guid: 1b96a072ad3869f47920825dbc9c1aa5, type: 2}
   - {fileID: 11400000, guid: 8c716cde35b6b2547b1785a4e840af57, type: 2}
@@ -63,37 +63,55 @@ MonoBehaviour:
     version: 1.0.4
     versionUrl: https://cmonkey.co/toolkit
     enabled: 0
-  checkedLastUpdateTimestamp: 1777797014
+  checkedLastUpdateTimestamp: 1779291417
   lastQOTDResponse:
-    questionId: 298
-    questionText: What is the main difference between the out and ref keywords? (behaviour
-      inside the function)
-    answerA: out doesn't need to be set; ref MUST be set
-    answerB: out MUST be set; ref doesn't need to be set
-    answerC: No difference
+    questionId: 303
+    questionText: 'When would this code cause an error?
+
+      <p>Building closest
+      = null;</p>
+
+      <p>for (int i = 0; i < instanceList.Count; i++) {</p>
+
+      <p>&nbsp;
+      &nbsp; if (Vector3.Distance(position, instanceList[i].GetPosition()) < Vector3.Distance(position,
+      closest.GetPosition())) {</p>
+
+      <p>&nbsp; &nbsp; &nbsp; &nbsp; closest
+      = instanceList[i];</p>
+
+      <p>&nbsp; &nbsp; }</p>
+
+      <p>}</p>
+
+      <p>return
+      closest;</p>'
+    answerA: When instanceList is empty
+    answerB: When instanceList has at least one element
+    answerC: When instanceList has exactly two elements
     answerD: 
     answerE: 
-  lastQotdTimestamp: 1777797014
+  lastQotdTimestamp: 1779291417
   lastDynamicHeaderResponse:
-    topImageUrl: https://codemonkeyexternal.blob.core.windows.net/external/Misc/codeMonkeyToolkit50Off.png
-    topText: My Toolkit is 50% OFF! 40+ Tools and Elements to help you make games
-      BETTER and FASTER!
-    topLink: toolkit
-    bottomText: My 10+ Years of C# Knowledge in 1 Course!
-    bottomLink: csharpcourse
-  lastDynamicHeaderTimestamp: 1777797014
+    topImageUrl: https://codemonkeyexternal.blob.core.windows.net/external/Misc/unityBundleMay26MustHave.png
+    topText: The BEST Unity Bundle in ages! Includes my most recommended asset 94%
+      OFF!
+    topLink: assetstore
+    bottomText: Get 98% OFF on awesome REALISTIC HumbleBundle!
+    bottomLink: humblebundle
+  lastDynamicHeaderTimestamp: 1779291417
   websiteLatestMessage:
     text: <a href="https://cmonkey.co/toolkit">Please write a Review on the Asset
       Store!</a>
-  websiteLatestMessageTimestamp: 1777797014
+  websiteLatestMessageTimestamp: 1779291417
   websiteLatestVideos:
     videos:
-    - youTubeId: 2gP-2rQ3o_Q
-      title: This Tool FIXES your Unity Project!
-    - youTubeId: 1bLBKMQ9YwE
-      title: BEST NEW Visual Assets to INSPIRE YOU! (APRIL 2026)
-    - youTubeId: XB7b4EXfjgM
-      title: What do YOU consider SUCCESS?
-    - youTubeId: LDgPyFmlsSI
-      title: 8 QUICK Game Dev Tips for SUCCESS!
-  websiteLatestVideosTimestamp: 1777797014
+    - youTubeId: ywDrlnC-Y3M
+      title: The BEST Unity tool got EVEN BETTER! (and FREE!)
+    - youTubeId: JE8LhN-kBtY
+      title: Programming Basics (C# Tutorial for Beginners)
+    - youTubeId: RXjO0W5iF_E
+      title: TOP 10 FREE NEW Assets MAY 2026!
+    - youTubeId: Fb5d_46JfVI
+      title: What are Unity Templates?
+  websiteLatestVideosTimestamp: 1779291417
