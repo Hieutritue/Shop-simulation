@@ -14,7 +14,7 @@ MonoBehaviour:
   m_EditorClassIdentifier: 
   currentVersion: 1.0.2
   subtype: toolkit
-  lastShownTimestamp: 1779289945
+  lastShownTimestamp: 1779721823
   toolSOList:
   - {fileID: 11400000, guid: 1b96a072ad3869f47920825dbc9c1aa5, type: 2}
   - {fileID: 11400000, guid: 8c716cde35b6b2547b1785a4e840af57, type: 2}
@@ -63,35 +63,21 @@ MonoBehaviour:
     version: 1.0.4
     versionUrl: https://cmonkey.co/toolkit
     enabled: 0
-  checkedLastUpdateTimestamp: 1779291417
+  checkedLastUpdateTimestamp: 1779721875
   lastQOTDResponse:
-    questionId: 303
-    questionText: 'When would this code cause an error?
+    questionId: 305
+    questionText: 'What is the result of this code:
 
-      <p>Building closest
-      = null;</p>
+      <p>int money = 2000000000;
+      // $2 billion</p>
 
-      <p>for (int i = 0; i < instanceList.Count; i++) {</p>
-
-      <p>&nbsp;
-      &nbsp; if (Vector3.Distance(position, instanceList[i].GetPosition()) < Vector3.Distance(position,
-      closest.GetPosition())) {</p>
-
-      <p>&nbsp; &nbsp; &nbsp; &nbsp; closest
-      = instanceList[i];</p>
-
-      <p>&nbsp; &nbsp; }</p>
-
-      <p>}</p>
-
-      <p>return
-      closest;</p>'
-    answerA: When instanceList is empty
-    answerB: When instanceList has at least one element
-    answerC: When instanceList has exactly two elements
+      <p>money += 1000000000; // Adding $1 billion</p>'
+    answerA: money == 3000000000
+    answerB: money == -1294967296
+    answerC: money == 0
     answerD: 
     answerE: 
-  lastQotdTimestamp: 1779291417
+  lastQotdTimestamp: 1779721875
   lastDynamicHeaderResponse:
     topImageUrl: https://codemonkeyexternal.blob.core.windows.net/external/Misc/unityBundleMay26MustHave.png
     topText: The BEST Unity Bundle in ages! Includes my most recommended asset 94%
@@ -99,19 +85,19 @@ MonoBehaviour:
     topLink: assetstore
     bottomText: Get 98% OFF on awesome REALISTIC HumbleBundle!
     bottomLink: humblebundle
-  lastDynamicHeaderTimestamp: 1779291417
+  lastDynamicHeaderTimestamp: 1779721875
   websiteLatestMessage:
     text: <a href="https://cmonkey.co/toolkit">Please write a Review on the Asset
       Store!</a>
-  websiteLatestMessageTimestamp: 1779291417
+  websiteLatestMessageTimestamp: 1779721875
   websiteLatestVideos:
     videos:
+    - youTubeId: 3zUfuhJBl3c
+      title: First game made $1mil, second $0!
+    - youTubeId: R5LZ_dxi3Fc
+      title: Visual Studio Shortcuts (C# Tutorial for Beginners)
+    - youTubeId: LW1gycyV8VM
+      title: TOP 10 NEW Games, Made with Unity! (APRIL 2026)
     - youTubeId: ywDrlnC-Y3M
       title: The BEST Unity tool got EVEN BETTER! (and FREE!)
-    - youTubeId: JE8LhN-kBtY
-      title: Programming Basics (C# Tutorial for Beginners)
-    - youTubeId: RXjO0W5iF_E
-      title: TOP 10 FREE NEW Assets MAY 2026!
-    - youTubeId: Fb5d_46JfVI
-      title: What are Unity Templates?
-  websiteLatestVideosTimestamp: 1779291417
+  websiteLatestVideosTimestamp: 1779721875
