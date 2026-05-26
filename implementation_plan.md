@@ -39,20 +39,35 @@
 **Ưu tiên: ⭐⭐⭐⭐⭐**
 
 ### Mục tiêu
-Kệ hàng hiển thị đồ vật, theo dõi số lượng còn lại, thông báo khi hết hàng.
+Kệ hàng chứa nhiều slot, mỗi slot chứa đúng 1 vật phẩm (ItemObject). Player xếp hàng bằng cách đặt ItemObject vào slot trống.
+
+### Thiết kế cấu trúc
+
+```
+Shelf (ShelfController)
+├── ShelfSlot_0  (ShelfSlot) ← chứa 1 ItemObject hoặc trống
+├── ShelfSlot_1  (ShelfSlot)
+├── ShelfSlot_2  (ShelfSlot)
+└── ...
+```
+
+- **1 `ShelfController`** quản lý một danh sách `ShelfSlot[]`
+- **1 `ShelfSlot`** chứa đúng **1 `ItemObject`** hoặc rỗng (`null`)
+- Player mang `ItemObject` đến → tương tác với Shelf → tự động đặt vào slot trống đầu tiên
 
 ### Scripts cần tạo
 | File | Mô tả |
 |---|---|
-| `ShelfSlot.cs` | Một ô trên kệ: chứa 1 loại item, có số lượng tối đa (ví dụ: 5) |
-| `ShelfController.cs` | Quản lý toàn bộ kệ: list các ShelfSlot, xử lý khi khách lấy đồ |
-| `ShelfUI.cs` | Hiển thị UI khi player click vào kệ để xếp hàng |
+| `ShelfSlot.cs` | Một ô trên kệ: có/không có 1 `ItemObject`. Có `Transform` vị trí đặt đồ. |
+| `ShelfController.cs` | Quản lý list `ShelfSlot`, expose `AddItem(ItemObject)` / `TakeItem()` cho AI khách |
+
+> ⚠️ **UI tạm thời bỏ qua** — xếp hàng bằng tương tác trực tiếp, không mở menu.
 
 ### Chi tiết
-- Mỗi kệ có **N slot**, mỗi slot gán 1 loại `ItemSO`
-- Khi `currentAmount == 0` → kệ hiện trạng thái "Hết hàng" (đổi màu, icon !)
-- Player click kệ → mở UI chọn hàng từ kho → gọi `InventorySystem` trừ số lượng → kệ fill lại
-- Visual: Show/Hide các item prefab 3D trên kệ theo `currentAmount`
+- `ShelfSlot` có `bool IsOccupied` → true khi đang chứa ItemObject
+- Khi Player `Interact()` với kệ → `ShelfController` tìm slot trống → đặt item từ tay player vào slot
+- Khi khách muốn lấy đồ → `ShelfController.TakeItem(slotIndex)` → trả về `ItemObject`, slot trở thành rỗng
+- Kiểm tra `IsEmpty` (toàn bộ slot trống) → dùng để AI khách bỏ qua kệ này
 
 ---
 

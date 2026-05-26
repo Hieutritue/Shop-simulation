@@ -10,11 +10,11 @@ public class ItemDatabase : ScriptableObject
 {
     public List<ItemSO> allItems = new List<ItemSO>();
 
-    public ItemSO GetItemByID(string id)
+    public ItemSO GetItemByName(string name)
     {
         foreach (var item in allItems)
         {
-            if (item.itemID == id)
+            if (item.itemName == name)
                 return item;
         }
         return null;
