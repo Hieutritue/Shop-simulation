@@ -85,11 +85,8 @@ public class ShelfController : MonoBehaviour, IInteractable
             ItemObject takenItem = TakeItem();
             if (takenItem != null)
             {
-                player.CarryObject(takenItem.gameObject);
-                // Parent the taken item to the player
-                takenItem.transform.SetParent(player.transform);
-                takenItem.transform.localPosition = new Vector3(0, 1f, 0.5f); // Position offset for carrying
-                takenItem.transform.localRotation = Quaternion.identity;
+                // Tái sử dụng pipeline carry chuẩn của ItemObject (smooth-follow CarryPoint).
+                takenItem.Interact(player);
                 Debug.Log($"Took {takenItem.ItemData?.itemName ?? "item"} from shelf.");
             }
             else

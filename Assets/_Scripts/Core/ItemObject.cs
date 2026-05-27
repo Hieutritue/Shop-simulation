@@ -84,4 +84,11 @@ public class ItemObject : MonoBehaviour, IInteractable
         _carryingPlayer = null;
         _velocity = Vector3.zero;
     }
+
+    // Gọi từ bên ngoài (Shelf, Checkout...) để dừng smooth-follow ngay lập tức
+    // khi item được snap vào slot — tránh 1-frame glitch của LateUpdate.
+    public void StopCarry()
+    {
+        StopBeingCarried();
+    }
 }

@@ -21,7 +21,10 @@ public class ShelfSlot : MonoBehaviour
         if (IsOccupied || item == null) return false;
 
         _currentItem = item;
-        
+
+        // Dừng smooth-follow trước khi snap, tránh LateUpdate kéo item về CarryPoint 1 frame nữa.
+        item.StopCarry();
+
         // Disable physics while on shelf
         if (item.TryGetComponent<Rigidbody>(out var rb))
         {
@@ -44,7 +47,10 @@ public class ShelfSlot : MonoBehaviour
         ItemObject takenItem = _currentItem;
         _currentItem = null;
 
-        // Re-enable physics or collider context if needed (though usually PlayerCarry or Customer handles this)
+        // Unparent để không chịu transform của slot khi follow theo player.
+        takenItem.transform.SetParent(null);
+
+        // Re-enable physics tạm thời; ItemObject.Interact() bên ngoài sẽ set kinematic lại nếu được carry.
         if (takenItem.TryGetComponent<Rigidbody>(out var rb))
         {
             rb.isKinematic = false;

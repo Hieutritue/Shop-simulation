@@ -94,7 +94,7 @@ Material:
   m_PrefabAsset: {fileID: 0}
   m_Name: Effect Material
   m_Shader: {fileID: -6465566751694194690, guid: c77db07224d9f784d90d7eb0e84c57f7, type: 3}
-  m_Parent: {fileID: 0}
+  m_Parent: {fileID: -3155325008900918967, guid: b19a3cd3624ad41b79a80b2030625150, type: 2}
   m_ModifiedSerializedProperties: 0
   m_ValidKeywords:
   - USE_DISTANCE_FOG
@@ -118,22 +118,8 @@ Material:
         m_Texture: {fileID: 0}
         m_Scale: {x: 1, y: 1}
         m_Offset: {x: 0, y: 0}
-    - unity_Lightmaps:
-        m_Texture: {fileID: 0}
-        m_Scale: {x: 1, y: 1}
-        m_Offset: {x: 0, y: 0}
-    - unity_LightmapsInd:
-        m_Texture: {fileID: 0}
-        m_Scale: {x: 1, y: 1}
-        m_Offset: {x: 0, y: 0}
-    - unity_ShadowMasks:
-        m_Texture: {fileID: 0}
-        m_Scale: {x: 1, y: 1}
-        m_Offset: {x: 0, y: 0}
     m_Ints: []
     m_Floats:
-    - _DistanceFogIntensity: 0.5
-    - _DistanceHeightBlend: 0.5
     - _Far: 150
     - _HeightFogIntensity: 0.5
     - _HighWorldY: 35
