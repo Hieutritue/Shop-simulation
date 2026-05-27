@@ -13,7 +13,8 @@ public class CustomerAgent : MonoBehaviour
 
     [Header("Behavior")]
     [SerializeField] private float _pickItemDuration = 1.5f;
-    [SerializeField] private float _arrivalDistance = 1.2f;
+    [Tooltip("Tốc độ xoay (deg/s) khi đứng xếp hàng — quay mặt về phía counter.")]
+    [SerializeField] private float _facingTurnSpeed = 540f;
     [SerializeField] private Transform _hand;
 
     [Header("Runtime (assigned by spawner)")]
@@ -57,11 +58,24 @@ public class CustomerAgent : MonoBehaviour
     {
         switch (_state)
         {
-            case State.GoToShelf: TickGoToShelf(); break;
-            case State.PickItem:  TickPickItem();  break;
-            case State.GoToExit:  TickGoToExit();  break;
-            // WaitInQueue: thụ động — chờ CheckoutCounter gọi OnServed.
+            case State.GoToShelf:    TickGoToShelf();    break;
+            case State.PickItem:     TickPickItem();     break;
+            case State.WaitInQueue:  TickWaitInQueue();  break;
+            case State.GoToExit:     TickGoToExit();     break;
         }
+    }
+
+    /// <summary>Khi đứng yên trong hàng → xoay mặt về phía counter.</summary>
+    private void TickWaitInQueue()
+    {
+        if (!HasArrived() || _checkout == null) return;
+
+        Vector3 dir = _checkout.transform.position - transform.position;
+        dir.y = 0f;
+        if (dir.sqrMagnitude < 0.0001f) return;
+
+        Quaternion target = Quaternion.LookRotation(dir);
+        transform.rotation = Quaternion.RotateTowards(transform.rotation, target, _facingTurnSpeed * Time.deltaTime);
     }
 
     // ───────── Shelf ─────────
@@ -172,7 +186,7 @@ public class CustomerAgent : MonoBehaviour
     private bool HasArrived()
     {
         if (_agent.pathPending) return false;
-        return _agent.remainingDistance <= Mathf.Max(_arrivalDistance, _agent.stoppingDistance + 0.05f);
+        return _agent.remainingDistance <= _agent.stoppingDistance + 0.1f;
     }
 
     private ShelfController FindStockedShelf()
