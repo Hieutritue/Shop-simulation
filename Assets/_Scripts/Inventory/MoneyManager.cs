@@ -1,9 +1,8 @@
-using System;
 using UnityEngine;
 
 /// <summary>
 /// Singleton quản lý tổng tiền cửa hàng.
-/// Khởi điểm $500, expose OnMoneyChanged để HUD/UI subscribe.
+/// Khởi điểm $500. Raise MoneyChangedEvent qua EventBus mỗi khi thay đổi.
 /// </summary>
 public class MoneyManager : MonoBehaviour
 {
@@ -13,9 +12,6 @@ public class MoneyManager : MonoBehaviour
     private int _money;
 
     public int Money => _money;
-
-    /// <summary>Args: (deltaAmount, newTotal). Delta âm khi tiêu, dương khi cộng.</summary>
-    public event Action<int, int> OnMoneyChanged;
 
     private void Awake()
     {
@@ -28,18 +24,24 @@ public class MoneyManager : MonoBehaviour
         _money = _startingMoney;
     }
 
+    private void Start()
+    {
+        // Phát event lần đầu để HUD/listener subscribe sau Awake vẫn nhận được giá trị khởi tạo.
+        EventBus.Raise(new MoneyChangedEvent(0, _money));
+    }
+
     public void AddMoney(int amount)
     {
         if (amount <= 0) return;
         _money += amount;
-        OnMoneyChanged?.Invoke(amount, _money);
+        EventBus.Raise(new MoneyChangedEvent(amount, _money));
     }
 
     public bool TrySpend(int amount)
     {
         if (amount <= 0 || _money < amount) return false;
         _money -= amount;
-        OnMoneyChanged?.Invoke(-amount, _money);
+        EventBus.Raise(new MoneyChangedEvent(-amount, _money));
         return true;
     }
 }
