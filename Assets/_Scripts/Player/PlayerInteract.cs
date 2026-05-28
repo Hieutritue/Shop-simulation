@@ -1,3 +1,4 @@
+// csharp
 using UnityEngine;
 using UnityEngine.InputSystem;
 
@@ -11,6 +12,9 @@ public class PlayerInteract : MonoBehaviour
 
     private PlayerCarry _playerCarry;
     private float _raycastTimer = 0f;
+
+    // Exposed read-only flag for other systems (HUD) to read
+    public bool IsLookingAtInteractable { get; private set; }
 
     private void Awake()
     {
@@ -27,17 +31,10 @@ public class PlayerInteract : MonoBehaviour
             CheckForInteractableRaycast();
         }
 
-        // Detect interact input (Keyboard E or Gamepad South/West button)
+        // Detect interact input
         bool interactInputPressed = false;
 
-        if (Keyboard.current != null && Keyboard.current.eKey.wasPressedThisFrame)
-        {
-            interactInputPressed = true;
-        }
-        else if (Gamepad.current != null && (Gamepad.current.buttonWest.wasPressedThisFrame || Gamepad.current.buttonSouth.wasPressedThisFrame))
-        {
-            interactInputPressed = true;
-        }
+        interactInputPressed = Input.GetKeyDown(KeyCode.Mouse0);
 
         if (interactInputPressed)
         {
@@ -53,11 +50,13 @@ public class PlayerInteract : MonoBehaviour
             IInteractable interactable = hit.collider.GetComponentInParent<IInteractable>();
             if (interactable != null)
             {
+                IsLookingAtInteractable = true;
                 Debug.Log($"Interactable detected: {interactable.GetType().Name} at distance {hit.distance:F2}");
                 return;
             }
         }
 
+        IsLookingAtInteractable = false;
         Debug.Log("No interactable detected");
     }
 
