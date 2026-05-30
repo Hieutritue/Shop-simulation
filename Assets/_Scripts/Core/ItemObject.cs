@@ -34,23 +34,30 @@ public class ItemObject : MonoBehaviour, IInteractable
 
     public void Interact(PlayerCarry player)
     {
-        if (player.HeldObject == null)
+        if (player.HeldObject != null) return;
+
+        // Nếu đang nằm trên kệ → để slot tự release (clear _currentItem, unparent, re-enable physics)
+        // trước khi pipeline carry bên dưới ghi đè kinematic/parent.
+        var slot = GetComponentInParent<ShelfSlot>();
+        if (slot != null && slot.CurrentItem == this)
         {
-            player.CarryObject(this.gameObject);
-
-            // Do NOT parent the item. Use a target carry transform and smooth towards it.
-            _carryTarget = player.CarryPoint;
-            _carryingPlayer = player;
-            _isCarried = true;
-
-            if (_rb != null)
-            {
-                _rb.isKinematic = true;
-                _rb.detectCollisions = false;
-            }
-
-            Debug.Log($"Nhặt {(_itemData != null ? _itemData.itemName : "Item trống")}");
+            slot.TakeItem();
         }
+
+        player.CarryObject(this.gameObject);
+
+        // Do NOT parent the item. Use a target carry transform and smooth towards it.
+        _carryTarget = player.CarryPoint;
+        _carryingPlayer = player;
+        _isCarried = true;
+
+        if (_rb != null)
+        {
+            _rb.isKinematic = true;
+            _rb.detectCollisions = false;
+        }
+
+        Debug.Log($"Nhặt {(_itemData != null ? _itemData.itemName : "Item trống")}");
     }
 
     private void LateUpdate()

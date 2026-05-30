@@ -3,13 +3,21 @@ using UnityEngine;
 [RequireComponent(typeof(PlayerCarry))]
 public class PlayerInteract : MonoBehaviour
 {
+    private const string LAYER_INTERACTABLE = "Interactable";
+    private const string LAYER_INTERACTABLE_OUTLINED = "InteractableOutlined";
+
     [Header("Interaction Settings")]
     [SerializeField] private float _interactRadius = 2f;
+    [Tooltip("Phải include cả 'Interactable' và 'InteractableOutlined' — vì layer bị đổi khi highlight, raycast vẫn cần nhận diện.")]
     [SerializeField] private LayerMask _interactLayer;
     [SerializeField] private float _raycastInterval = 0.1f;
 
     private PlayerCarry _playerCarry;
     private float _raycastTimer = 0f;
+
+    private int _layerInteractable = -1;
+    private int _layerInteractableOutlined = -1;
+    private GameObject _highlightedRoot;
 
     /// <summary>Interactable hiện player đang nhìn (raycast forward). Null nếu không có.</summary>
     public IInteractable CurrentInteractable { get; private set; }
@@ -22,6 +30,13 @@ public class PlayerInteract : MonoBehaviour
     private void Awake()
     {
         _playerCarry = GetComponent<PlayerCarry>();
+        _layerInteractable = LayerMask.NameToLayer(LAYER_INTERACTABLE);
+        _layerInteractableOutlined = LayerMask.NameToLayer(LAYER_INTERACTABLE_OUTLINED);
+    }
+
+    private void OnDisable()
+    {
+        ClearHighlight();
     }
 
     private void Update()
@@ -48,38 +63,65 @@ public class PlayerInteract : MonoBehaviour
             {
                 CurrentInteractable = interactable;
                 CurrentItemName = ResolveItemName(interactable);
+                SetHighlight((interactable as MonoBehaviour)?.gameObject);
                 return;
             }
         }
 
         CurrentInteractable = null;
         CurrentItemName = null;
+        ClearHighlight();
     }
 
-    /// <summary>Khi đang cầm đồ, chỉ Shelf là target hợp lệ (đặt đồ). Khác (Checkout, item khác) bị filter.</summary>
+    private void SetHighlight(GameObject root)
+    {
+        if (_highlightedRoot == root) return;
+        ClearHighlight();
+        if (root == null || _layerInteractable < 0 || _layerInteractableOutlined < 0) return;
+        SwapLayerRecursive(root.transform, _layerInteractable, _layerInteractableOutlined);
+        _highlightedRoot = root;
+    }
+
+    private void ClearHighlight()
+    {
+        if (_highlightedRoot == null) return;
+        if (_layerInteractable >= 0 && _layerInteractableOutlined >= 0)
+        {
+            SwapLayerRecursive(_highlightedRoot.transform, _layerInteractableOutlined, _layerInteractable);
+        }
+        _highlightedRoot = null;
+    }
+
+    // Chỉ đổi những GameObject đang ở fromLayer — children ở layer khác (Default, UI, ...) không bị động vào.
+    private static void SwapLayerRecursive(Transform t, int fromLayer, int toLayer)
+    {
+        if (t.gameObject.layer == fromLayer) t.gameObject.layer = toLayer;
+        for (int i = 0; i < t.childCount; i++)
+        {
+            SwapLayerRecursive(t.GetChild(i), fromLayer, toLayer);
+        }
+    }
+
+    /// <summary>
+    /// Cầm đồ: chỉ Shelf còn slot trống (để đặt). Không cầm: mọi target trừ Shelf
+    /// (lấy đồ phải nhắm trực tiếp vào ItemObject, không qua shelf).
+    /// </summary>
     private bool CanInteractWith(IInteractable target)
     {
         if (target == null) return false;
-        if (_playerCarry.HeldObject != null) return target is ShelfController;
-        return true;
+        if (_playerCarry.HeldObject != null)
+        {
+            return target is ShelfController shelf && !shelf.IsFull();
+        }
+        return !(target is ShelfController);
     }
 
-    /// <summary>Lấy tên item để show trên PickupGuide. Trả null nếu target không có item.</summary>
+    /// <summary>Lấy tên item để show trên PickupGuide. Trả null nếu target không phải item.</summary>
     private static string ResolveItemName(IInteractable target)
     {
         if (target is ItemObject item)
         {
             return item.ItemData != null ? item.ItemData.itemName : null;
-        }
-        if (target is ShelfController shelf && shelf.Slots != null)
-        {
-            // Lấy tên item ở slot occupied đầu tiên (theo thứ tự take của shelf: cuối → đầu).
-            for (int i = shelf.Slots.Length - 1; i >= 0; i--)
-            {
-                var s = shelf.Slots[i];
-                if (s != null && s.IsOccupied && s.CurrentItem != null && s.CurrentItem.ItemData != null)
-                    return s.CurrentItem.ItemData.itemName;
-            }
         }
         return null;
     }

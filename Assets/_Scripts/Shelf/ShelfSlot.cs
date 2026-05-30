@@ -25,11 +25,12 @@ public class ShelfSlot : MonoBehaviour
         // Dừng smooth-follow trước khi snap, tránh LateUpdate kéo item về CarryPoint 1 frame nữa.
         item.StopCarry();
 
-        // Disable physics while on shelf
+        // Kinematic để không bị physics đẩy. detectCollisions=true để raycast vẫn thấy
+        // → player có thể nhắm vào item trên kệ để lấy ra (ItemObject.Interact path).
         if (item.TryGetComponent<Rigidbody>(out var rb))
         {
             rb.isKinematic = true;
-            rb.detectCollisions = false; // Optional, to prevent player pushing it off
+            rb.detectCollisions = true;
         }
 
         // Parent and snap to position

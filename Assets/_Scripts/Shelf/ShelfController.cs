@@ -62,37 +62,20 @@ public class ShelfController : MonoBehaviour, IInteractable
         return null;
     }
 
+    // Shelf chỉ phục vụ thao tác ĐẶT đồ. Lấy đồ → player nhắm trực tiếp vào ItemObject.
     public void Interact(PlayerCarry player)
     {
-        if (player == null) return;
+        if (player == null || player.HeldObject == null) return;
+        if (!player.HeldObject.TryGetComponent<ItemObject>(out var itemToPlace)) return;
 
-        // Check if player is holding an item
-        if (player.HeldObject != null && player.HeldObject.TryGetComponent<ItemObject>(out var itemToPlace))
+        if (AddItem(itemToPlace))
         {
-            if (AddItem(itemToPlace))
-            {
-                player.ClearHeldObject();
-                Debug.Log($"Placed {itemToPlace.ItemData?.itemName ?? "item"} onto shelf.");
-            }
-            else
-            {
-                Debug.Log("Shelf is full!");
-            }
+            player.ClearHeldObject();
+            Debug.Log($"Placed {itemToPlace.ItemData?.itemName ?? "item"} onto shelf.");
         }
-        // If player is not holding anything, try to take an item from the shelf
-        else if (player.HeldObject == null)
+        else
         {
-            ItemObject takenItem = TakeItem();
-            if (takenItem != null)
-            {
-                // Tái sử dụng pipeline carry chuẩn của ItemObject (smooth-follow CarryPoint).
-                takenItem.Interact(player);
-                Debug.Log($"Took {takenItem.ItemData?.itemName ?? "item"} from shelf.");
-            }
-            else
-            {
-                Debug.Log("Shelf is empty!");
-            }
+            Debug.Log("Shelf is full!");
         }
     }
 }
