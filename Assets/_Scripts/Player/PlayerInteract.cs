@@ -11,6 +11,7 @@ public class PlayerInteract : MonoBehaviour
     [Tooltip("Phải include cả 'Interactable' và 'InteractableOutlined' — vì layer bị đổi khi highlight, raycast vẫn cần nhận diện.")]
     [SerializeField] private LayerMask _interactLayer;
     [SerializeField] private float _raycastInterval = 0.1f;
+    [SerializeField] private Transform _cameraTransform;
 
     private PlayerCarry _playerCarry;
     private float _raycastTimer = 0f;
@@ -18,6 +19,7 @@ public class PlayerInteract : MonoBehaviour
     private int _layerInteractable = -1;
     private int _layerInteractableOutlined = -1;
     private GameObject _highlightedRoot;
+    private GameObject _debugLastHitObject;
 
     /// <summary>Interactable hiện player đang nhìn (raycast forward). Null nếu không có.</summary>
     public IInteractable CurrentInteractable { get; private set; }
@@ -55,7 +57,7 @@ public class PlayerInteract : MonoBehaviour
 
     private void CheckForInteractableRaycast()
     {
-        Ray ray = new Ray(transform.position, transform.forward);
+        Ray ray = new Ray(_cameraTransform.position, _cameraTransform .forward);
         if (Physics.Raycast(ray, out RaycastHit hit, _interactRadius, _interactLayer, QueryTriggerInteraction.Ignore))
         {
             IInteractable interactable = hit.collider.GetComponentInParent<IInteractable>();
@@ -64,6 +66,7 @@ public class PlayerInteract : MonoBehaviour
                 CurrentInteractable = interactable;
                 CurrentItemName = ResolveItemName(interactable);
                 SetHighlight((interactable as MonoBehaviour)?.gameObject);
+                Debug.Log($"[PlayerInteract] Nhìn thấy interactable: {(interactable as MonoBehaviour).gameObject.name}");
                 return;
             }
         }
@@ -128,7 +131,7 @@ public class PlayerInteract : MonoBehaviour
 
     private void TryInteract()
     {
-        Ray ray = new Ray(transform.position, transform.forward);
+        Ray ray = new Ray(_cameraTransform.position, _cameraTransform.forward);
         if (Physics.Raycast(ray, out RaycastHit hit, _interactRadius, _interactLayer, QueryTriggerInteraction.Ignore))
         {
             IInteractable interactable = hit.collider.GetComponentInParent<IInteractable>();
