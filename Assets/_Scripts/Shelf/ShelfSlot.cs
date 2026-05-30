@@ -1,7 +1,11 @@
+using PrimeTween;
 using UnityEngine;
 
 public class ShelfSlot : MonoBehaviour
 {
+    private const float ARC_DURATION = 0.1f; // mỗi nửa cung → tổng ~0.2s
+    private const float ARC_HEIGHT = 0.4f;
+
     [SerializeField] private Transform _placementPoint;
     private ItemObject _currentItem;
 
@@ -22,23 +26,41 @@ public class ShelfSlot : MonoBehaviour
 
         _currentItem = item;
 
-        // Dừng smooth-follow trước khi snap, tránh LateUpdate kéo item về CarryPoint 1 frame nữa.
+        // Dừng smooth-follow trước khi tween, tránh LateUpdate kéo item về CarryPoint.
         item.StopCarry();
 
-        // Kinematic để không bị physics đẩy. detectCollisions=true để raycast vẫn thấy
-        // → player có thể nhắm vào item trên kệ để lấy ra (ItemObject.Interact path).
-        if (item.TryGetComponent<Rigidbody>(out var rb))
+        // Tắt collision trong lúc tween để item không hích player bay nhẹ.
+        // Bật lại detectCollisions trong FinalizePlacement → raycast lấy đồ vẫn thấy.
+        Rigidbody rb = null;
+        if (item.TryGetComponent(out rb))
         {
             rb.isKinematic = true;
-            rb.detectCollisions = true;
+            rb.detectCollisions = false;
         }
 
-        // Parent and snap to position
+        // Vòng cung: tay player → apex (giữa + lên cao) → slot.
+        Vector3 start = item.transform.position;
+        Vector3 end = _placementPoint.position;
+        Vector3 apex = (start + end) * 0.5f + Vector3.up * ARC_HEIGHT;
+
+        Sequence.Create()
+            .Chain(Tween.Position(item.transform, apex, ARC_DURATION, Ease.OutQuad))
+            .Chain(Tween.Position(item.transform, end, ARC_DURATION, Ease.InQuad))
+            .OnComplete(() => FinalizePlacement(item, rb));
+
+        return true;
+    }
+
+    private void FinalizePlacement(ItemObject item, Rigidbody rb)
+    {
+        // Slot có thể đã bị TakeItem trong lúc tween → bỏ qua để không lừa state.
+        if (item == null || _currentItem != item) return;
+
         item.transform.SetParent(_placementPoint);
         item.transform.localPosition = Vector3.zero;
         item.transform.localRotation = Quaternion.identity;
 
-        return true;
+        if (rb != null) rb.detectCollisions = true;
     }
 
     public ItemObject TakeItem()

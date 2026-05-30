@@ -1,9 +1,10 @@
+using System.Collections.Generic;
+using PrimeTween;
 using UnityEngine;
 
 [RequireComponent(typeof(PlayerCarry))]
 public class PlayerInteract : MonoBehaviour
 {
-    private const string LAYER_INTERACTABLE = "Interactable";
     private const string LAYER_INTERACTABLE_OUTLINED = "InteractableOutlined";
 
     [Header("Interaction Settings")]
@@ -16,9 +17,11 @@ public class PlayerInteract : MonoBehaviour
     private PlayerCarry _playerCarry;
     private float _raycastTimer = 0f;
 
-    private int _layerInteractable = -1;
     private int _layerInteractableOutlined = -1;
     private GameObject _highlightedRoot;
+    // Cache layer gốc của mọi descendant khi highlight → restore chính xác lúc clear,
+    // hoạt động bất kể prefab có gắn renderer ở child layer Default hay Interactable.
+    private readonly List<KeyValuePair<Transform, int>> _highlightCache = new List<KeyValuePair<Transform, int>>();
     private GameObject _debugLastHitObject;
 
     /// <summary>Interactable hiện player đang nhìn (raycast forward). Null nếu không có.</summary>
@@ -32,7 +35,6 @@ public class PlayerInteract : MonoBehaviour
     private void Awake()
     {
         _playerCarry = GetComponent<PlayerCarry>();
-        _layerInteractable = LayerMask.NameToLayer(LAYER_INTERACTABLE);
         _layerInteractableOutlined = LayerMask.NameToLayer(LAYER_INTERACTABLE_OUTLINED);
     }
 
@@ -80,28 +82,30 @@ public class PlayerInteract : MonoBehaviour
     {
         if (_highlightedRoot == root) return;
         ClearHighlight();
-        if (root == null || _layerInteractable < 0 || _layerInteractableOutlined < 0) return;
-        SwapLayerRecursive(root.transform, _layerInteractable, _layerInteractableOutlined);
+        if (root == null || _layerInteractableOutlined < 0) return;
+        CacheAndApply(root.transform);
         _highlightedRoot = root;
     }
 
     private void ClearHighlight()
     {
         if (_highlightedRoot == null) return;
-        if (_layerInteractable >= 0 && _layerInteractableOutlined >= 0)
+        for (int i = 0; i < _highlightCache.Count; i++)
         {
-            SwapLayerRecursive(_highlightedRoot.transform, _layerInteractableOutlined, _layerInteractable);
+            var kvp = _highlightCache[i];
+            if (kvp.Key != null) kvp.Key.gameObject.layer = kvp.Value;
         }
+        _highlightCache.Clear();
         _highlightedRoot = null;
     }
 
-    // Chỉ đổi những GameObject đang ở fromLayer — children ở layer khác (Default, UI, ...) không bị động vào.
-    private static void SwapLayerRecursive(Transform t, int fromLayer, int toLayer)
+    private void CacheAndApply(Transform t)
     {
-        if (t.gameObject.layer == fromLayer) t.gameObject.layer = toLayer;
+        _highlightCache.Add(new KeyValuePair<Transform, int>(t, t.gameObject.layer));
+        t.gameObject.layer = _layerInteractableOutlined;
         for (int i = 0; i < t.childCount; i++)
         {
-            SwapLayerRecursive(t.GetChild(i), fromLayer, toLayer);
+            CacheAndApply(t.GetChild(i));
         }
     }
 
@@ -145,19 +149,40 @@ public class PlayerInteract : MonoBehaviour
         DropHeldObject();
     }
 
+    private const float DROP_ARC_DURATION = 0.1f; // mỗi nửa cung → tổng ~0.2s
+    private const float DROP_ARC_HEIGHT = 0.4f;
+
     private void DropHeldObject()
     {
         GameObject heldObj = _playerCarry.HeldObject;
         _playerCarry.ClearHeldObject();
 
+        if (heldObj.TryGetComponent<ItemObject>(out var item)) item.StopCarry();
         heldObj.transform.SetParent(null);
-        heldObj.transform.position = transform.position + transform.forward * 1.5f + Vector3.up * 0.5f;
 
-        if (heldObj.TryGetComponent<Rigidbody>(out var rb))
+        Vector3 start = heldObj.transform.position;
+        Vector3 end = transform.position + transform.forward * 1.5f + Vector3.up * 0.5f;
+        Vector3 apex = (start + end) * 0.5f + Vector3.up * DROP_ARC_HEIGHT;
+
+        // Kinematic + tắt collision trong tween → tránh đẩy player. Bật physics khi chạm đất.
+        Rigidbody rb = heldObj.GetComponent<Rigidbody>();
+        if (rb != null)
         {
-            rb.isKinematic = false;
-            rb.detectCollisions = true;
+            rb.isKinematic = true;
+            rb.detectCollisions = false;
         }
+
+        Sequence.Create()
+            .Chain(Tween.Position(heldObj.transform, apex, DROP_ARC_DURATION, Ease.OutQuad))
+            .Chain(Tween.Position(heldObj.transform, end, DROP_ARC_DURATION, Ease.InQuad))
+            .OnComplete(() =>
+            {
+                if (rb != null)
+                {
+                    rb.isKinematic = false;
+                    rb.detectCollisions = true;
+                }
+            });
     }
 
     private void OnDrawGizmosSelected()
