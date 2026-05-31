@@ -15,7 +15,6 @@ public class GuideController : MonoBehaviour
     [SerializeField] private TMP_Text _pickupItemNameLabel;
 
     [Header("Action guides (Mouse Left / Right)")]
-    [SerializeField] private GameObject _guideParent;
     [SerializeField] private GameObject _guideleft;
     [SerializeField] private TMP_Text _guideLeftLabel;
     [SerializeField] private GameObject _guideright;
@@ -81,14 +80,12 @@ public class GuideController : MonoBehaviour
                  payCustomer.IsActiveInSession)
             leftText = _labelPay;
         else if (!holding && target is CheckoutCounter) leftText = _labelCheckout;
-        else if (!holding && (target is ItemObject || target is ScannerGun || target is MoneyStack))
+        else if (!holding && (target is ItemObject || target is ScannerGun || target is CashDrawer))
             leftText = _labelPickup;
 
         bool showLeft = leftText != null;
         bool showRight = holding;
-        bool showGuideParent = showLeft || showRight;
-
-        if (_guideParent != null) _guideParent.SetActive(showGuideParent);
+        
         if (_guideleft != null) _guideleft.SetActive(showLeft);
         if (showLeft && _guideLeftLabel != null) _guideLeftLabel.text = leftText;
         if (_guideright != null) _guideright.SetActive(showRight);
@@ -110,7 +107,6 @@ public class GuideController : MonoBehaviour
     private void HideAll()
     {
         if (_pickupGuide != null) _pickupGuide.SetActive(false);
-        if (_guideParent != null) _guideParent.SetActive(false);
         if (_guideleft != null) _guideleft.SetActive(false);
         if (_guideright != null) _guideright.SetActive(false);
         if (_guideF != null) _guideF.SetActive(false);
