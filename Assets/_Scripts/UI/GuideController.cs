@@ -27,6 +27,10 @@ public class GuideController : MonoBehaviour
     [SerializeField] private string _labelDrop = "Thả đồ";
     [SerializeField] private string _labelCancel = "Hủy";
 
+    [Header("Pickup labels")]
+    [SerializeField] private string _labelCounter = "Quầy thanh toán";
+    [SerializeField] private string _labelScanner = "Máy quét";
+
     [Header("Optional refs (auto-find nếu để trống)")]
     [SerializeField] private PlayerInteract _playerInteract;
     [SerializeField] private PlayerCarry _playerCarry;
@@ -48,12 +52,12 @@ public class GuideController : MonoBehaviour
 
         bool holding = _playerCarry.HeldObject != null;
         IInteractable target = _playerInteract.CurrentInteractable;
-        string itemName = _playerInteract.CurrentItemName;
+        string pickupLabel = ResolvePickupLabel(target);
 
-        // PickupGuide: chỉ khi không cầm + có item name (item hoặc shelf còn đồ).
-        bool showPickup = !holding && !string.IsNullOrEmpty(itemName);
+        // PickupGuide: chỉ khi không cầm + có label phù hợp.
+        bool showPickup = !holding && !string.IsNullOrEmpty(pickupLabel);
         if (_pickupGuide != null) _pickupGuide.SetActive(showPickup);
-        if (showPickup && _pickupItemNameLabel != null) _pickupItemNameLabel.text = itemName;
+        if (showPickup && _pickupItemNameLabel != null) _pickupItemNameLabel.text = pickupLabel;
 
         // Mouse Left: dynamic theo context.
         string leftText = null;
@@ -84,5 +88,15 @@ public class GuideController : MonoBehaviour
         if (_guideParent != null) _guideParent.SetActive(false);
         if (_guideleft != null) _guideleft.SetActive(false);
         if (_guideright != null) _guideright.SetActive(false);
+    }
+
+    private string ResolvePickupLabel(IInteractable target)
+    {
+        if (target == null) return null;
+        if (target is ItemObject item) return item.ItemData != null ? item.ItemData.itemName : null;
+        if (target is CheckoutCounter) return _labelCounter;
+        if (target is ScannerGun) return _labelScanner;
+        if (target is MoneyStack money) return $"${money.Denomination}";
+        return null;
     }
 }

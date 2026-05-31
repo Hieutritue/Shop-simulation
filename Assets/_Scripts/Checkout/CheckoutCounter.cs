@@ -12,6 +12,9 @@ public class CheckoutCounter : MonoBehaviour, IInteractable
 {
     private const float SCAN_TWEEN_DURATION = 0.35f;
     private const float SCAN_TWEEN_HEIGHT = 0.6f;
+    private const float ENGAGE_DURATION = 0.35f;
+    private const float DISENGAGE_DURATION = 0.25f;
+    private const float DISENGAGE_BACK_OFFSET = 0.8f;
 
     [Header("Queue")]
     [SerializeField] private Transform[] _queuePositions;
@@ -30,6 +33,8 @@ public class CheckoutCounter : MonoBehaviour, IInteractable
     private int _scannedSlotCursor;
     private GameObject _engagedPlayer;
     private FirstPersonController _engagedFpc;
+    private bool _isEngageTweening;
+    private bool _isDisengageTweening;
 
     public bool IsPlayerEngaged => _engagedPlayer != null;
 
@@ -174,40 +179,64 @@ public class CheckoutCounter : MonoBehaviour, IInteractable
         CurrentSession = null;
         _scannedSlotCursor = 0;
 
-        // Khách rời → tự nhả player khỏi work spot.
-        DisengagePlayer();
+        // Player giữ workSpot — phải bấm F để rời. Khách tiếp theo có thể bắt đầu session ngay.
     }
 
     // ───────── Lock-in player vào work spot ─────────
     public void EngagePlayer(GameObject playerGO)
     {
         if (playerGO == null || _engagedPlayer != null) return;
+        if (_isEngageTweening || _isDisengageTweening) return;
 
         _engagedPlayer = playerGO;
         _engagedFpc = playerGO.GetComponent<FirstPersonController>();
+        if (_engagedFpc != null) _engagedFpc.LockMovement(true);
 
-        // Snap position+rotation chỉ khi có workSpot — vẫn engage (lock WASD + UI) nếu chưa assign.
-        if (_playerWorkSpot != null)
-        {
-            var cc = playerGO.GetComponent<CharacterController>();
-            if (cc != null) cc.enabled = false;
-            playerGO.transform.SetPositionAndRotation(_playerWorkSpot.position, _playerWorkSpot.rotation);
-            if (cc != null) cc.enabled = true;
-        }
-        else
+        if (_playerWorkSpot == null)
         {
             Debug.LogWarning("[Checkout] _playerWorkSpot chưa assign — engage nhưng không teleport.");
+            return;
         }
 
-        if (_engagedFpc != null) _engagedFpc.LockMovement(true);
+        // Tween mượt vị trí + xoay người về workSpot. Tắt CharacterController để tween world position.
+        var cc = playerGO.GetComponent<CharacterController>();
+        if (cc != null) cc.enabled = false;
+        _isEngageTweening = true;
+
+        Sequence.Create()
+            .Group(Tween.Position(playerGO.transform, _playerWorkSpot.position, ENGAGE_DURATION, Ease.OutQuad))
+            .Group(Tween.Rotation(playerGO.transform, _playerWorkSpot.rotation, ENGAGE_DURATION, Ease.OutQuad))
+            .OnComplete(() =>
+            {
+                if (cc != null) cc.enabled = true;
+                _isEngageTweening = false;
+            });
     }
 
     public void DisengagePlayer()
     {
-        if (_engagedPlayer == null) return;
-        if (_engagedFpc != null) _engagedFpc.LockMovement(false);
+        if (_engagedPlayer == null || _isDisengageTweening) return;
+
+        GameObject playerGO = _engagedPlayer;
+        FirstPersonController fpc = _engagedFpc;
+        var cc = playerGO.GetComponent<CharacterController>();
+
+        // Clear engaged ref ngay để UI ẩn + tránh re-engage trong lúc đẩy lùi.
         _engagedPlayer = null;
         _engagedFpc = null;
+
+        // Đẩy player lùi theo hướng họ đang nhìn (negative forward).
+        Vector3 backPos = playerGO.transform.position - playerGO.transform.forward * DISENGAGE_BACK_OFFSET;
+        if (cc != null) cc.enabled = false;
+        _isDisengageTweening = true;
+
+        Tween.Position(playerGO.transform, backPos, DISENGAGE_DURATION, Ease.OutQuad)
+            .OnComplete(() =>
+            {
+                if (cc != null) cc.enabled = true;
+                if (fpc != null) fpc.LockMovement(false);
+                _isDisengageTweening = false;
+            });
     }
 
     // Cleanup khi rời workSpot bằng F: MoneyStack → destroy, ScannerGun → ReturnHome.
