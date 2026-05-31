@@ -39,6 +39,12 @@ public class CheckoutCounter : MonoBehaviour, IInteractable
 
     private void Update()
     {
+        // F key → rời workSpot, dọn MoneyStack/ScannerGun đang cầm.
+        if (IsPlayerEngaged && Input.GetKeyDown(KeyCode.F))
+        {
+            CleanupHeldThenDisengage();
+        }
+
         if (CurrentSession == null) return;
 
         CurrentSession.TickPatience(Time.deltaTime);
@@ -204,14 +210,38 @@ public class CheckoutCounter : MonoBehaviour, IInteractable
         _engagedFpc = null;
     }
 
+    // Cleanup khi rời workSpot bằng F: MoneyStack → destroy, ScannerGun → ReturnHome.
+    private void CleanupHeldThenDisengage()
+    {
+        if (_engagedPlayer != null)
+        {
+            var carry = _engagedPlayer.GetComponent<PlayerCarry>();
+            if (carry != null && carry.HeldObject != null)
+            {
+                GameObject held = carry.HeldObject;
+                if (held.TryGetComponent<ScannerGun>(out var scanner))
+                {
+                    carry.ClearHeldObject();
+                    scanner.ReturnHome();
+                }
+                else if (held.GetComponent<MoneyStack>() != null)
+                {
+                    carry.ClearHeldObject();
+                    Destroy(held);
+                }
+                // Item thường khác — giữ lại trong tay player.
+            }
+        }
+        DisengagePlayer();
+    }
+
     // ───────── Player IInteractable ─────────
-    // Không cầm gì + có session đang chờ → engage (lock-in vào work spot, UI panel hiện).
+    // Không cầm gì → engage workSpot (cho phép cả khi không có session để player chuẩn bị).
     // Đưa change → click vào Customer (xem CustomerAgent.Interact), không qua counter.
     public void Interact(PlayerCarry player)
     {
         if (player == null) return;
         if (player.HeldObject != null) return;
-        if (CurrentSession == null) return;
         EngagePlayer(player.gameObject);
     }
 }

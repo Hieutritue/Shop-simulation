@@ -49,11 +49,19 @@ public class CustomerAgent : MonoBehaviour, IInteractable
         _checkout != null && _checkout.CurrentSession != null && _checkout.CurrentSession.Customer == this;
 
     // Player cầm MoneyStack click → đưa tiền cho customer này. Chỉ valid khi đang trong session.
+    // Reject nếu denom > số tiền thừa còn thiếu (chỉ chấp nhận đúng/ít hơn).
     public void Interact(PlayerCarry player)
     {
         if (player == null || player.HeldObject == null) return;
         if (!player.HeldObject.TryGetComponent<MoneyStack>(out var money)) return;
         if (!IsActiveInSession) return;
+
+        int remaining = _checkout.CurrentSession.ChangeRemaining;
+        if (money.Denomination > remaining)
+        {
+            Debug.Log($"[Customer] Từ chối ${money.Denomination} — chỉ còn thiếu ${remaining}.");
+            return;
+        }
 
         _checkout.CurrentSession.RegisterChangeGiven(money.Denomination);
 
