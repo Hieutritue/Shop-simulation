@@ -3,8 +3,8 @@ using UnityEngine;
 
 public class ShelfSlot : MonoBehaviour
 {
-    private const float ARC_DURATION = 0.1f; // mỗi nửa cung → tổng ~0.2s
-    private const float ARC_HEIGHT = 0.4f;
+    private const float ARC_DURATION = 0.3f; // mỗi nửa cung → tổng ~0.2s
+    private const float ARC_HEIGHT = 0.8f;
 
     [SerializeField] private Transform _placementPoint;
     private ItemObject _currentItem;
@@ -44,8 +44,7 @@ public class ShelfSlot : MonoBehaviour
         Vector3 apex = (start + end) * 0.5f + Vector3.up * ARC_HEIGHT;
 
         Sequence.Create()
-            .Chain(Tween.Position(item.transform, apex, ARC_DURATION, Ease.OutQuad))
-            .Chain(Tween.Position(item.transform, end, ARC_DURATION, Ease.InQuad))
+            .Chain(PrimeTweenExtensions.Jump(item.transform,end,ARC_DURATION,ARC_HEIGHT))
             .OnComplete(() => FinalizePlacement(item, rb));
 
         return true;
