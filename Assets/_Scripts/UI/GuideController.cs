@@ -26,8 +26,12 @@ public class GuideController : MonoBehaviour
     [Header("Action labels")]
     [SerializeField] private string _labelPlaceOnShelf = "Đặt đồ";
     [SerializeField] private string _labelCheckout = "Tính tiền";
+    [SerializeField] private string _labelPickup = "Lấy";
+    [SerializeField] private string _labelScan = "Quét giá";
+    [SerializeField] private string _labelPay = "Trả tiền";
     [SerializeField] private string _labelDrop = "Thả đồ";
     [SerializeField] private string _labelCancel = "Hủy";
+    [SerializeField] private string _labelLeaveCounter = "Ra khỏi quầy";
 
     [Header("Pickup labels")]
     [SerializeField] private string _labelCounter = "Quầy thanh toán";
@@ -36,11 +40,13 @@ public class GuideController : MonoBehaviour
     [Header("Optional refs (auto-find nếu để trống)")]
     [SerializeField] private PlayerInteract _playerInteract;
     [SerializeField] private PlayerCarry _playerCarry;
+    [SerializeField] private CheckoutCounter _counter;
 
     private void Awake()
     {
         if (_playerInteract == null) _playerInteract = FindObjectOfType<PlayerInteract>();
         if (_playerCarry == null) _playerCarry = FindObjectOfType<PlayerCarry>();
+        if (_counter == null) _counter = FindObjectOfType<CheckoutCounter>();
     }
 
     private void Start()
@@ -62,9 +68,21 @@ public class GuideController : MonoBehaviour
         if (showPickup && _pickupItemNameLabel != null) _pickupItemNameLabel.text = pickupLabel;
 
         // Mouse Left: dynamic theo context.
+        GameObject heldObj = _playerCarry.HeldObject;
         string leftText = null;
         if (holding && target is ShelfController) leftText = _labelPlaceOnShelf;
+        else if (holding && heldObj.GetComponent<ScannerGun>() != null &&
+                 target is ItemObject scanItem &&
+                 scanItem.GetComponentInParent<CustomerAgent>() is CustomerAgent scanOwner &&
+                 scanOwner.IsActiveInSession)
+            leftText = _labelScan;
+        else if (holding && heldObj.GetComponent<MoneyStack>() != null &&
+                 target is CustomerAgent payCustomer &&
+                 payCustomer.IsActiveInSession)
+            leftText = _labelPay;
         else if (!holding && target is CheckoutCounter) leftText = _labelCheckout;
+        else if (!holding && (target is ItemObject || target is ScannerGun || target is MoneyStack))
+            leftText = _labelPickup;
 
         bool showLeft = leftText != null;
         bool showRight = holding;
@@ -82,6 +100,11 @@ public class GuideController : MonoBehaviour
                 (held.GetComponent<MoneyStack>() != null || held.GetComponent<ScannerGun>() != null);
             _guideRightLabel.text = isCancel ? _labelCancel : _labelDrop;
         }
+
+        // F Guide: chỉ bật khi đang engage ở workSpot — F để rời quầy.
+        bool showF = _counter != null && _counter.IsPlayerEngaged;
+        if (_guideF != null) _guideF.SetActive(showF);
+        if (showF && _guideFLabel != null) _guideFLabel.text = _labelLeaveCounter;
     }
 
     private void HideAll()
@@ -90,6 +113,7 @@ public class GuideController : MonoBehaviour
         if (_guideParent != null) _guideParent.SetActive(false);
         if (_guideleft != null) _guideleft.SetActive(false);
         if (_guideright != null) _guideright.SetActive(false);
+        if (_guideF != null) _guideF.SetActive(false);
     }
 
     private string ResolvePickupLabel(IInteractable target)
