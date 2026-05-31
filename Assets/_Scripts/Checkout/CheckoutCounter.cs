@@ -112,24 +112,54 @@ public class CheckoutCounter : MonoBehaviour, IInteractable
 
         CurrentSession = new CheckoutSession(customer, items, _defaultPatience);
         _scannedSlotCursor = 0;
+
+        // Tween từng item từ tay customer → slot trên counter (trình bày để scan).
+        for (int i = 0; i < items.Count; i++)
+        {
+            Transform slot = _scannedZone != null && _scannedZone.Length > 0
+                ? _scannedZone[i % _scannedZone.Length] : transform;
+            TweenItemToPresentationSlot(items[i], slot);
+        }
         return true;
     }
 
-    /// <summary>Scanner gọi qua đây — tween item về ScannedZone nếu scan thành công.</summary>
+    private void TweenItemToPresentationSlot(ItemObject item, Transform slot)
+    {
+        if (item == null || slot == null) return;
+        item.transform.SetParent(null);
+        if (item.TryGetComponent<Rigidbody>(out var rb))
+        {
+            rb.isKinematic = true;
+            rb.detectCollisions = false; // tạm tắt — bật lại OnComplete để scan raycast thấy
+        }
+
+        Vector3 end = slot.position;
+        Sequence.Create()
+            .Chain(PrimeTweenExtensions.Jump(item.transform, end, SCAN_TWEEN_DURATION, SCAN_TWEEN_HEIGHT))
+            .OnComplete(() =>
+            {
+                if (item == null) return;
+                item.transform.SetParent(slot);
+                item.transform.localPosition = Vector3.zero;
+                item.transform.localRotation = Quaternion.identity;
+                if (item.TryGetComponent<Rigidbody>(out var rb2)) rb2.detectCollisions = true;
+            });
+    }
+
+    /// <summary>Scanner gọi qua đây — tween item về tay customer sau scan.</summary>
     public bool TryScanItem(ItemObject item)
     {
         if (CurrentSession == null) return false;
         if (!CurrentSession.TryScan(item)) return false;
-        MoveItemToScannedZone(item);
+        TweenItemBackToCustomerHand(item);
         return true;
     }
 
-    private void MoveItemToScannedZone(ItemObject item)
+    private void TweenItemBackToCustomerHand(ItemObject item)
     {
         if (item == null) return;
-
-        Transform target = NextScannedSlot();
-        Vector3 end = target != null ? target.position : transform.position;
+        Transform hand = CurrentSession?.Customer != null ? CurrentSession.Customer.Hand : null;
+        if (hand == null) return;
 
         item.transform.SetParent(null);
         if (item.TryGetComponent<Rigidbody>(out var rb))
@@ -138,26 +168,16 @@ public class CheckoutCounter : MonoBehaviour, IInteractable
             rb.detectCollisions = false;
         }
 
+        Vector3 end = hand.position;
         Sequence.Create()
             .Chain(PrimeTweenExtensions.Jump(item.transform, end, SCAN_TWEEN_DURATION, SCAN_TWEEN_HEIGHT))
             .OnComplete(() =>
             {
-                if (item == null) return;
-                if (target != null)
-                {
-                    item.transform.SetParent(target);
-                    item.transform.localPosition = Vector3.zero;
-                    item.transform.localRotation = Quaternion.identity;
-                }
+                if (item == null || hand == null) return;
+                item.transform.SetParent(hand);
+                item.transform.localPosition = Vector3.zero;
+                item.transform.localRotation = Quaternion.identity;
             });
-    }
-
-    private Transform NextScannedSlot()
-    {
-        if (_scannedZone == null || _scannedZone.Length == 0) return null;
-        Transform t = _scannedZone[_scannedSlotCursor % _scannedZone.Length];
-        _scannedSlotCursor++;
-        return t;
     }
 
     private void EndSession(bool happy)
@@ -253,10 +273,10 @@ public class CheckoutCounter : MonoBehaviour, IInteractable
                     carry.ClearHeldObject();
                     scanner.ReturnHome();
                 }
-                else if (held.GetComponent<MoneyStack>() != null)
+                else if (held.TryGetComponent<MoneyStack>(out var money))
                 {
                     carry.ClearHeldObject();
-                    Destroy(held);
+                    money.CancelHome();
                 }
                 // Item thường khác — giữ lại trong tay player.
             }

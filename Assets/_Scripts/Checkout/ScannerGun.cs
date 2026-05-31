@@ -1,3 +1,4 @@
+using PrimeTween;
 using UnityEngine;
 
 /// <summary>
@@ -75,18 +76,30 @@ public class ScannerGun : MonoBehaviour, IInteractable
         _velocity = Vector3.zero;
     }
 
-    /// <summary>Reset scanner về vị trí ban đầu trên quầy (gọi từ right-click).</summary>
+    /// <summary>Tween jump về home position rồi snap chuẩn + bật collision lại (cho pick up sau).</summary>
     public void ReturnHome()
     {
         StopCarry();
         if (_rb != null)
         {
             _rb.isKinematic = true;
-            _rb.detectCollisions = true; // raycast lại phải hit được để pick up lần nữa
+            _rb.detectCollisions = false; // tắt trong tween, bật lại OnComplete
         }
-        if (_homeParent != null) transform.SetParent(_homeParent);
-        transform.localPosition = _homeLocalPos;
-        transform.localRotation = _homeLocalRot;
+        transform.SetParent(null);
+
+        Vector3 endWorld = _homeParent != null
+            ? _homeParent.TransformPoint(_homeLocalPos)
+            : _homeLocalPos;
+
+        Sequence.Create()
+            .Chain(PrimeTweenExtensions.Jump(transform, endWorld, 0.3f, 0.5f))
+            .OnComplete(() =>
+            {
+                if (_homeParent != null) transform.SetParent(_homeParent);
+                transform.localPosition = _homeLocalPos;
+                transform.localRotation = _homeLocalRot;
+                if (_rb != null) _rb.detectCollisions = true;
+            });
     }
 
     /// <returns>true nếu scan thành công 1 item.</returns>

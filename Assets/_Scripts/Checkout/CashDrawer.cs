@@ -28,6 +28,7 @@ public class CashDrawer : MonoBehaviour, IInteractable
 
         MoneyStack stack = Instantiate(_moneyStackPrefab, _spawnPoint.position, _spawnPoint.rotation);
         stack.SetDenomination(_denomination);
+        stack.SetHome(_spawnPoint.position); // right-click sẽ tween về đây trước khi destroy
         stack.Interact(player); // delegate sang carry pipeline của MoneyStack
     }
 }

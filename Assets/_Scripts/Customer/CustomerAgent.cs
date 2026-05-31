@@ -1,5 +1,6 @@
 using System.Collections.Generic;
 using System.Linq;
+using PrimeTween;
 using UnityEngine;
 using UnityEngine.AI;
 
@@ -43,13 +44,14 @@ public class CustomerAgent : MonoBehaviour, IInteractable
     private bool _hasPaid;
 
     public List<ItemObject> HeldItems => _heldItems;
+    public Transform Hand => _hand != null ? _hand : transform;
 
     /// <summary>True khi customer này là khách đang phục vụ ở session active của counter.</summary>
     public bool IsActiveInSession =>
         _checkout != null && _checkout.CurrentSession != null && _checkout.CurrentSession.Customer == this;
 
-    // Player cầm MoneyStack click → đưa tiền cho customer này. Chỉ valid khi đang trong session.
-    // Reject nếu denom > số tiền thừa còn thiếu (chỉ chấp nhận đúng/ít hơn).
+    // Player cầm MoneyStack click → tween money đến customer rồi destroy + cộng tiền.
+    // Reject nếu denom > số tiền thừa còn thiếu.
     public void Interact(PlayerCarry player)
     {
         if (player == null || player.HeldObject == null) return;
@@ -63,11 +65,27 @@ public class CustomerAgent : MonoBehaviour, IInteractable
             return;
         }
 
-        _checkout.CurrentSession.RegisterChangeGiven(money.Denomination);
-
+        int denom = money.Denomination;
         GameObject obj = player.HeldObject;
         player.ClearHeldObject();
-        Destroy(obj);
+        money.StopCarry();
+
+        obj.transform.SetParent(null);
+        if (obj.TryGetComponent<Rigidbody>(out var rb))
+        {
+            rb.isKinematic = true;
+            rb.detectCollisions = false;
+        }
+
+        Vector3 end = Hand.position;
+        CheckoutSession session = _checkout.CurrentSession;
+        Sequence.Create()
+            .Chain(PrimeTweenExtensions.Jump(obj.transform, end, 0.3f, 0.4f))
+            .OnComplete(() =>
+            {
+                session?.RegisterChangeGiven(denom);
+                if (obj != null) Destroy(obj);
+            });
     }
 
     public void Init(Transform exitPoint, CheckoutCounter checkout)
@@ -197,10 +215,8 @@ public class CustomerAgent : MonoBehaviour, IInteractable
         var session = _checkout?.CurrentSession;
         if (session == null) return;
 
-        // Đồng bộ _heldItems với session.Unscanned (items đã bị scan đã được counter tween đi).
-        SyncHeldItemsFromSession(session);
-
-        // Khi hết hàng trong tay → tự trả tiền (có thể dư).
+        // Items vẫn thuộc về customer (jump qua counter rồi quay về tay sau scan).
+        // Trigger pay khi mọi item đã scanned (session.AllScanned dựa trên Unscanned.Count == 0).
         if (!_hasPaid && session.AllScanned)
         {
             int extra = Random.Range(0, _maxExtraPay + 1);
@@ -209,18 +225,6 @@ public class CustomerAgent : MonoBehaviour, IInteractable
             _hasPaid = true;
         }
         // session.IsComplete → counter sẽ gọi TriggerLeaveHappy() lên customer này.
-    }
-
-    private void SyncHeldItemsFromSession(CheckoutSession session)
-    {
-        for (int i = _heldItems.Count - 1; i >= 0; i--)
-        {
-            ItemObject it = _heldItems[i];
-            if (it == null || !session.Unscanned.Contains(it))
-            {
-                _heldItems.RemoveAt(i);
-            }
-        }
     }
 
     // ───────── Leave (happy / angry) ─────────

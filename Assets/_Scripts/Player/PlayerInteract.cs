@@ -125,11 +125,12 @@ public class PlayerInteract : MonoBehaviour
         {
             if (held.GetComponent<ScannerGun>() != null)
             {
-                // Highlight item trong tay customer đang phục vụ (scan target).
+                // Highlight item nằm trong session.Unscanned (đã trình bày trên counter, chưa scan).
                 if (target is ItemObject scanItem)
                 {
-                    var owner = scanItem.GetComponentInParent<CustomerAgent>();
-                    return owner != null && owner.IsActiveInSession;
+                    if (_counter == null) _counter = Object.FindFirstObjectByType<CheckoutCounter>();
+                    var session = _counter?.CurrentSession;
+                    return session != null && session.Unscanned.Contains(scanItem);
                 }
                 return false;
             }
@@ -193,11 +194,11 @@ public class PlayerInteract : MonoBehaviour
 
         GameObject held = _playerCarry.HeldObject;
 
-        // MoneyStack → hủy luôn (trả về drawer ngầm).
-        if (held.GetComponent<MoneyStack>() != null)
+        // MoneyStack → tween jump về drawer home rồi destroy.
+        if (held.TryGetComponent<MoneyStack>(out var money))
         {
             _playerCarry.ClearHeldObject();
-            Destroy(held);
+            money.CancelHome();
             return;
         }
 

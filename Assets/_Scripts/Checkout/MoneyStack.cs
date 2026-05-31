@@ -1,3 +1,4 @@
+using PrimeTween;
 using UnityEngine;
 
 /// <summary>
@@ -7,6 +8,8 @@ using UnityEngine;
 public class MoneyStack : MonoBehaviour, IInteractable
 {
     [SerializeField] private int _denomination = 1;
+    private Vector3 _homePos;
+    private bool _hasHome;
 
     [Header("Follow Settings")]
     [SerializeField] private float _positionSmoothTime = 0.08f;
@@ -15,6 +18,35 @@ public class MoneyStack : MonoBehaviour, IInteractable
     public int Denomination => _denomination;
 
     public void SetDenomination(int v) => _denomination = Mathf.Max(0, v);
+
+    /// <summary>CashDrawer set khi spawn — vị trí jump về khi cancel (right-click).</summary>
+    public void SetHome(Vector3 worldPos)
+    {
+        _homePos = worldPos;
+        _hasHome = true;
+    }
+
+    /// <summary>Tween jump về home rồi destroy. Logic destroy chạy OnComplete.</summary>
+    public void CancelHome()
+    {
+        StopCarry();
+        if (_rb != null)
+        {
+            _rb.isKinematic = true;
+            _rb.detectCollisions = false;
+        }
+        transform.SetParent(null);
+
+        if (!_hasHome)
+        {
+            Destroy(gameObject);
+            return;
+        }
+
+        Sequence.Create()
+            .Chain(PrimeTweenExtensions.Jump(transform, _homePos, 0.3f, 0.4f))
+            .OnComplete(() => { if (this != null) Destroy(gameObject); });
+    }
 
     private Transform _carryTarget;
     private bool _isCarried = false;
