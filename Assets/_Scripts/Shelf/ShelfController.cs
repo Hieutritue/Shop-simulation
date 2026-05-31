@@ -66,6 +66,14 @@ public class ShelfController : MonoBehaviour, IInteractable
     public void Interact(PlayerCarry player)
     {
         if (player == null || player.HeldObject == null) return;
+
+        // Cầm ItemBox → xếp lần lượt 1 item từ box lên shelf mỗi click.
+        if (player.HeldObject.TryGetComponent<ItemBox>(out var box))
+        {
+            box.PlaceOneItemToShelf(this);
+            return;
+        }
+
         if (!player.HeldObject.TryGetComponent<ItemObject>(out var itemToPlace)) return;
 
         if (AddItem(itemToPlace))

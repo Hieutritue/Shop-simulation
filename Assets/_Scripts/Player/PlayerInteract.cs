@@ -54,9 +54,19 @@ public class PlayerInteract : MonoBehaviour
             CheckForInteractableRaycast();
         }
 
-        // Chuột trái: tương tác. Chuột phải: drop.
+        // Chuột trái: tương tác. Chuột phải: drop. F: hành động phụ (vd: ItemBox ném đồ).
         if (Input.GetMouseButtonDown(0)) TryInteract();
         if (Input.GetMouseButtonDown(1)) TryDrop();
+        if (Input.GetKeyDown(KeyCode.F)) TryHandleF();
+    }
+
+    private void TryHandleF()
+    {
+        if (_playerCarry.HeldObject == null) return;
+        if (_playerCarry.HeldObject.TryGetComponent<ItemBox>(out var box))
+        {
+            box.ThrowAllItems();
+        }
     }
 
     private void CheckForInteractableRaycast()
@@ -124,6 +134,21 @@ public class PlayerInteract : MonoBehaviour
         GameObject held = _playerCarry.HeldObject;
         if (held != null)
         {
+            // Cầm ItemBox → ItemObject (gom) hoặc Shelf (xếp).
+            if (held.GetComponent<ItemBox>() != null)
+            {
+                if (target is ItemObject boxItem)
+                {
+                    if (boxItem.GetComponentInParent<CustomerAgent>() != null) return false;
+                    if (_counter == null) _counter = Object.FindFirstObjectByType<CheckoutCounter>();
+                    var session = _counter?.CurrentSession;
+                    if (session != null && session.Unscanned.Contains(boxItem)) return false;
+                    return true;
+                }
+                if (target is ShelfController shelf2) return !shelf2.IsFull();
+                return false;
+            }
+
             if (held.GetComponent<ScannerGun>() != null)
             {
                 // Highlight item nằm trong session.Unscanned (đã trình bày trên counter, chưa scan).

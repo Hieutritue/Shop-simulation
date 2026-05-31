@@ -34,6 +34,17 @@ public class ItemObject : MonoBehaviour, IInteractable
 
     public void Interact(PlayerCarry player)
     {
+        if (player == null) return;
+
+        // Cầm ItemBox → gom self vào box thay vì carry. Release shelf slot trước nếu cần.
+        if (player.HeldObject != null && player.HeldObject.TryGetComponent<ItemBox>(out var box))
+        {
+            var shelfSlot = GetComponentInParent<ShelfSlot>();
+            if (shelfSlot != null && shelfSlot.CurrentItem == this) shelfSlot.TakeItem();
+            box.TryAddItem(this);
+            return;
+        }
+
         if (player.HeldObject != null) return;
 
         // Nếu đang nằm trên kệ → để slot tự release (clear _currentItem, unparent, re-enable physics)

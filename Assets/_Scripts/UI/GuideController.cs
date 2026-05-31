@@ -24,17 +24,22 @@ public class GuideController : MonoBehaviour
 
     [Header("Action labels")]
     [SerializeField] private string _labelPlaceOnShelf = "Đặt đồ";
+    [SerializeField] private string _labelStockShelf = "Xếp đồ";
+    [SerializeField] private string _labelGather = "Gom đồ";
     [SerializeField] private string _labelCheckout = "Tính tiền";
     [SerializeField] private string _labelPickup = "Lấy";
     [SerializeField] private string _labelScan = "Quét giá";
     [SerializeField] private string _labelPay = "Trả tiền";
     [SerializeField] private string _labelDrop = "Thả đồ";
+    [SerializeField] private string _labelDropBox = "Thả hộp";
     [SerializeField] private string _labelCancel = "Hủy";
     [SerializeField] private string _labelLeaveCounter = "Ra khỏi quầy";
+    [SerializeField] private string _labelDropItems = "Bỏ đồ";
 
     [Header("Pickup labels")]
     [SerializeField] private string _labelCounter = "Quầy thanh toán";
     [SerializeField] private string _labelScanner = "Máy quét";
+    [SerializeField] private string _labelItemBox = "Hộp carton";
 
     [Header("Optional refs (auto-find nếu để trống)")]
     [SerializeField] private PlayerInteract _playerInteract;
@@ -68,8 +73,11 @@ public class GuideController : MonoBehaviour
 
         // Mouse Left: dynamic theo context.
         GameObject heldObj = _playerCarry.HeldObject;
+        bool holdingBox = holding && heldObj.GetComponent<ItemBox>() != null;
         string leftText = null;
-        if (holding && target is ShelfController) leftText = _labelPlaceOnShelf;
+        if (holdingBox && target is ItemObject) leftText = _labelGather;
+        else if (holdingBox && target is ShelfController) leftText = _labelStockShelf;
+        else if (holding && target is ShelfController) leftText = _labelPlaceOnShelf;
         else if (holding && heldObj.GetComponent<ScannerGun>() != null &&
                  target is ItemObject scanItem &&
                  scanItem.GetComponentInParent<CustomerAgent>() is CustomerAgent scanOwner &&
@@ -80,7 +88,7 @@ public class GuideController : MonoBehaviour
                  payCustomer.IsActiveInSession)
             leftText = _labelPay;
         else if (!holding && target is CheckoutCounter) leftText = _labelCheckout;
-        else if (!holding && (target is ItemObject || target is ScannerGun || target is CashDrawer))
+        else if (!holding && (target is ItemObject || target is ScannerGun || target is CashDrawer || target is ItemBox))
             leftText = _labelPickup;
 
         bool showLeft = leftText != null;
@@ -95,13 +103,18 @@ public class GuideController : MonoBehaviour
             GameObject held = _playerCarry.HeldObject;
             bool isCancel = held != null &&
                 (held.GetComponent<MoneyStack>() != null || held.GetComponent<ScannerGun>() != null);
-            _guideRightLabel.text = isCancel ? _labelCancel : _labelDrop;
+            bool isBox = held != null && held.GetComponent<ItemBox>() != null;
+            _guideRightLabel.text = isCancel ? _labelCancel : (isBox ? _labelDropBox : _labelDrop);
         }
 
-        // F Guide: chỉ bật khi đang engage ở workSpot — F để rời quầy.
-        bool showF = _counter != null && _counter.IsPlayerEngaged;
+        // F Guide: engage counter → "Ra khỏi quầy"; cầm ItemBox → "Bỏ đồ".
+        bool engagedAtCounter = _counter != null && _counter.IsPlayerEngaged;
+        bool showF = engagedAtCounter || holdingBox;
         if (_guideF != null) _guideF.SetActive(showF);
-        if (showF && _guideFLabel != null) _guideFLabel.text = _labelLeaveCounter;
+        if (showF && _guideFLabel != null)
+        {
+            _guideFLabel.text = holdingBox ? _labelDropItems : _labelLeaveCounter;
+        }
     }
 
     private void HideAll()
@@ -120,6 +133,7 @@ public class GuideController : MonoBehaviour
         if (target is ScannerGun) return _labelScanner;
         if (target is MoneyStack money) return $"${money.Denomination}";
         if (target is CashDrawer drawer) return $"${drawer.Denomination}";
+        if (target is ItemBox) return _labelItemBox;
         return null;
     }
 }
