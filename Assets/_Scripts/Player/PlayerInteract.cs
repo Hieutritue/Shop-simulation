@@ -149,7 +149,15 @@ public class PlayerInteract : MonoBehaviour
         if (target is CheckoutCounter counter) return !counter.IsPlayerEngaged;
         if (target is CustomerAgent) return false;
 
-        if (target is ItemObject item && item.GetComponentInParent<CustomerAgent>() != null) return false;
+        if (target is ItemObject item)
+        {
+            // Đồ trong tay customer → chỉ scanner mới chạm tới.
+            if (item.GetComponentInParent<CustomerAgent>() != null) return false;
+            // Đồ đang trình bày trên counter (còn trong session.Unscanned) → chỉ scanner mới scan, không cầm tay.
+            if (_counter == null) _counter = Object.FindFirstObjectByType<CheckoutCounter>();
+            var session = _counter?.CurrentSession;
+            if (session != null && session.Unscanned.Contains(item)) return false;
+        }
 
         // Tool quầy (scanner/cash drawer/money rơi) chỉ tương tác được khi đang engage ở counter.
         if (target is ScannerGun || target is MoneyStack || target is CashDrawer)
