@@ -15,6 +15,7 @@ public class PlayerInteract : MonoBehaviour
     [SerializeField] private Transform _cameraTransform;
 
     private PlayerCarry _playerCarry;
+    private CheckoutCounter _counter;
     private float _raycastTimer = 0f;
 
     private int _layerInteractableOutlined = -1;
@@ -146,6 +147,13 @@ public class PlayerInteract : MonoBehaviour
         if (target is CustomerAgent) return false;
 
         if (target is ItemObject item && item.GetComponentInParent<CustomerAgent>() != null) return false;
+
+        // Tool quầy (scanner/cash drawer/money rơi) chỉ tương tác được khi đang engage ở counter.
+        if (target is ScannerGun || target is MoneyStack || target is CashDrawer)
+        {
+            if (_counter == null) _counter = Object.FindFirstObjectByType<CheckoutCounter>();
+            return _counter != null && _counter.IsPlayerEngaged;
+        }
 
         return true;
     }

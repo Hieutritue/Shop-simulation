@@ -82,7 +82,7 @@ public class ScannerGun : MonoBehaviour, IInteractable
         if (_rb != null)
         {
             _rb.isKinematic = true;
-            _rb.detectCollisions = false;
+            _rb.detectCollisions = true; // raycast lại phải hit được để pick up lần nữa
         }
         if (_homeParent != null) transform.SetParent(_homeParent);
         transform.localPosition = _homeLocalPos;

@@ -176,20 +176,22 @@ public class CheckoutCounter : MonoBehaviour, IInteractable
     public void EngagePlayer(GameObject playerGO)
     {
         if (playerGO == null || _engagedPlayer != null) return;
-        if (_playerWorkSpot == null)
-        {
-            Debug.LogWarning("[Checkout] _playerWorkSpot chưa assign.");
-            return;
-        }
 
         _engagedPlayer = playerGO;
         _engagedFpc = playerGO.GetComponent<FirstPersonController>();
 
-        // Snap position+rotation, tạm tắt CharacterController để teleport.
-        var cc = playerGO.GetComponent<CharacterController>();
-        if (cc != null) cc.enabled = false;
-        playerGO.transform.SetPositionAndRotation(_playerWorkSpot.position, _playerWorkSpot.rotation);
-        if (cc != null) cc.enabled = true;
+        // Snap position+rotation chỉ khi có workSpot — vẫn engage (lock WASD + UI) nếu chưa assign.
+        if (_playerWorkSpot != null)
+        {
+            var cc = playerGO.GetComponent<CharacterController>();
+            if (cc != null) cc.enabled = false;
+            playerGO.transform.SetPositionAndRotation(_playerWorkSpot.position, _playerWorkSpot.rotation);
+            if (cc != null) cc.enabled = true;
+        }
+        else
+        {
+            Debug.LogWarning("[Checkout] _playerWorkSpot chưa assign — engage nhưng không teleport.");
+        }
 
         if (_engagedFpc != null) _engagedFpc.LockMovement(true);
     }
