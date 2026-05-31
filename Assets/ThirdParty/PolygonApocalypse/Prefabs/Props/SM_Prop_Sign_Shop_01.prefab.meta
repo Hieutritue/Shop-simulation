@@ -1,0 +1,16 @@
+fileFormatVersion: 2
+guid: 8f443944f5b95e3418520d680dd2fc41
+timeCreated: 1567737595
+licenseType: Store
+NativeFormatImporter:
+  mainObjectFileID: 100100000
+  userData: 
+  assetBundleName: 
+  assetBundleVariant: 
+AssetOrigin:
+  serializedVersion: 1
+  productId: 0
+  packageName: POLYGON Apocalypse
+  packageVersion: 1.18.3
+  assetPath: Assets/ThirdParty/PolygonApocalypse/Prefabs/Props/SM_Prop_Sign_Shop_01.prefab
+  uploadId: 0
