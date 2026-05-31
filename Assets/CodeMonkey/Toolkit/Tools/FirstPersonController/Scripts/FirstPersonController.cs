@@ -73,7 +73,10 @@ namespace CodeMonkey.Toolkit.TFirstPersonController {
             // Transform moveVector from localSpace into worldSpace
             moveVector = transform.TransformVector(moveVector);
 
-            characterController.Move(moveVector * moveSpeed * Time.deltaTime);
+            // Skip nếu CC bị disable (vd: checkout đang tween engage/disengage).
+            if (characterController.enabled) {
+                characterController.Move(moveVector * moveSpeed * Time.deltaTime);
+            }
 
             
             // Handle Mouse Look Around

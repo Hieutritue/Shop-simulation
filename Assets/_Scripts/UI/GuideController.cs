@@ -97,6 +97,7 @@ public class GuideController : MonoBehaviour
         if (target is CheckoutCounter) return _labelCounter;
         if (target is ScannerGun) return _labelScanner;
         if (target is MoneyStack money) return $"${money.Denomination}";
+        if (target is CashDrawer drawer) return $"${drawer.Denomination}";
         return null;
     }
 }

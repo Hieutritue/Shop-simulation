@@ -10,6 +10,8 @@ public class CashDrawer : MonoBehaviour, IInteractable
     [SerializeField] private MoneyStack _moneyStackPrefab;
     [SerializeField] private Transform _spawnPoint;
 
+    public int Denomination => _denomination;
+
     private void Awake()
     {
         if (_spawnPoint == null) _spawnPoint = this.transform;
