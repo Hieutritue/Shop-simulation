@@ -80,8 +80,8 @@ public class GuideController : MonoBehaviour
         else if (holding && target is ShelfController) leftText = _labelPlaceOnShelf;
         else if (holding && heldObj.GetComponent<ScannerGun>() != null &&
                  target is ItemObject scanItem &&
-                 scanItem.GetComponentInParent<CustomerAgent>() is CustomerAgent scanOwner &&
-                 scanOwner.IsActiveInSession)
+                 _counter != null && _counter.CurrentSession != null &&
+                 _counter.CurrentSession.Unscanned.Contains(scanItem))
             leftText = _labelScan;
         else if (holding && heldObj.GetComponent<MoneyStack>() != null &&
                  target is CustomerAgent payCustomer &&
