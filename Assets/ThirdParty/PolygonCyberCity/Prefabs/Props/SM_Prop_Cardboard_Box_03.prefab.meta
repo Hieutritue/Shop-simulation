@@ -1,0 +1,14 @@
+fileFormatVersion: 2
+guid: 32cc54641bc63334a9b8c021c90f7daf
+PrefabImporter:
+  externalObjects: {}
+  userData: 
+  assetBundleName: 
+  assetBundleVariant: 
+AssetOrigin:
+  serializedVersion: 1
+  productId: 0
+  packageName: POLYGON CyberCity
+  packageVersion: 1.3.2
+  assetPath: Assets/ThirdParty/PolygonCyberCity/Prefabs/Props/SM_Prop_Cardboard_Box_03.prefab
+  uploadId: 0
