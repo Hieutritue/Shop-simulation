@@ -1,19 +1,21 @@
 using System.Collections.Generic;
+using PrimeTween;
 using UnityEngine;
 
 /// <summary>
-/// Hộp carton chứa tối đa 5 ItemObject. Pickupable + smooth follow như ItemObject.
-/// Player cầm box → click item: gom vào box; click shelf: xếp 1 item lên shelf;
-/// right-click: thả hộp; F: ném items ra random forward.
-/// Items trong box giữ rigidbody non-kinematic → wiggle khi player di chuyển.
+/// Hộp carton chứa tối đa 6 ItemObject. Pickupable + smooth follow như ItemObject.
+/// Player cầm box → click item: tween jump vào slot trong hộp (no physics);
+/// click shelf: xếp 1 item lên shelf; right-click: thả hộp; F: ném items ra random forward.
 /// </summary>
 public class ItemBox : MonoBehaviour, IInteractable
 {
-    private const int MAX_CAPACITY = 5;
+    private const int MAX_CAPACITY = 6;
+    private const float ADD_TWEEN_DURATION = 0.25f;
+    private const float ADD_TWEEN_HEIGHT = 0.5f;
     private const float THROW_FORCE = 4f;
     private const float THROW_UPWARD = 0.4f;
 
-    [Header("Slots trong hộp (max 5)")]
+    [Header("Slots trong hộp (max 6)")]
     [Tooltip("Vị trí xếp items trong hộp — Transform markers.")]
     [SerializeField] private Transform[] _slots;
 
@@ -75,7 +77,7 @@ public class ItemBox : MonoBehaviour, IInteractable
         _velocity = Vector3.zero;
     }
 
-    /// <summary>Gom 1 ItemObject vào box (gọi từ ItemObject.Interact khi player cầm box).</summary>
+    /// <summary>Gom 1 ItemObject vào box bằng tween jump (no physics).</summary>
     public bool TryAddItem(ItemObject item)
     {
         if (item == null || IsFull) return false;
@@ -83,20 +85,31 @@ public class ItemBox : MonoBehaviour, IInteractable
 
         item.StopCarry();
 
-        Transform parent = (_slots != null && _items.Count < _slots.Length)
+        Transform slot = (_slots != null && _items.Count < _slots.Length)
             ? _slots[_items.Count] : transform;
-        item.transform.SetParent(parent);
-        item.transform.localPosition = Vector3.zero;
-        item.transform.localRotation = Quaternion.identity;
 
-        // Rigidbody non-kinematic → items wiggle khi box di chuyển (collide với walls).
-        if (item.TryGetComponent<Rigidbody>(out var rb))
+        // Reserve trước để IsFull/Index đúng nếu có thêm click trong lúc tween.
+        _items.Add(item);
+
+        item.transform.SetParent(null);
+        Rigidbody rb = null;
+        if (item.TryGetComponent(out rb))
         {
-            rb.isKinematic = false;
-            rb.detectCollisions = true;
+            rb.isKinematic = true;
+            rb.detectCollisions = false; // no physics trong box
         }
 
-        _items.Add(item);
+        Vector3 end = slot.position;
+        Sequence.Create()
+            .Chain(PrimeTweenExtensions.Jump(item.transform, end, ADD_TWEEN_DURATION, ADD_TWEEN_HEIGHT))
+            .OnComplete(() =>
+            {
+                if (item == null || slot == null) return;
+                item.transform.SetParent(slot);
+                item.transform.localPosition = Vector3.zero;
+                item.transform.localRotation = Quaternion.identity;
+            });
+
         return true;
     }
 
