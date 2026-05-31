@@ -20,6 +20,8 @@ public class GuideController : MonoBehaviour
     [SerializeField] private TMP_Text _guideLeftLabel;
     [SerializeField] private GameObject _guideright;
     [SerializeField] private TMP_Text _guideRightLabel;
+    [SerializeField] private GameObject _guideF;
+    [SerializeField] private TMP_Text _guideFLabel;
 
     [Header("Action labels")]
     [SerializeField] private string _labelPlaceOnShelf = "Đặt đồ";

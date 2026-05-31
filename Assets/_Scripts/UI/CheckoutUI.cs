@@ -36,9 +36,9 @@ public class CheckoutUI : MonoBehaviour
         SetVisible(show);
         if (!show) return;
 
-        if (_subtotalText != null) _subtotalText.text = $"${session.Subtotal}";
-        if (_paidText != null) _paidText.text = $"${session.Paid}";
-        if (_changeOwedText != null) _changeOwedText.text = $"${session.ChangeRemaining}";
+        if (_subtotalText != null) _subtotalText.text = $"Giá: ${session.Subtotal}";
+        if (_paidText != null) _paidText.text = $"Khách trả: ${session.Paid}";
+        if (_changeOwedText != null) _changeOwedText.text = $"Tiền thừa: ${session.ChangeRemaining}";
         if (_unscannedCountText != null) _unscannedCountText.text = $"{session.Unscanned.Count} chưa scan";
 
         if (_patienceBar != null && session.PatienceTotal > 0f)
