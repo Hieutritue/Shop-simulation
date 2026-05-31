@@ -110,17 +110,36 @@ public class PlayerInteract : MonoBehaviour
     }
 
     /// <summary>
-    /// Cầm đồ: chỉ Shelf còn slot trống (để đặt). Không cầm: mọi target trừ Shelf
-    /// (lấy đồ phải nhắm trực tiếp vào ItemObject, không qua shelf).
+    /// Cầm ItemObject thường → chỉ Shelf còn slot.
+    /// Cầm MoneyStack → chỉ CheckoutCounter (đưa change).
+    /// Cầm ScannerGun → không có interact target (click sẽ delegate sang TryScan).
+    /// Không cầm: pickup được mọi target trừ Shelf/Counter (cần item phù hợp mới đặt được).
+    /// Đồ trong tay customer không được pick lên (chỉ scanner mới chạm tới).
     /// </summary>
     private bool CanInteractWith(IInteractable target)
     {
         if (target == null) return false;
-        if (_playerCarry.HeldObject != null)
+
+        GameObject held = _playerCarry.HeldObject;
+        if (held != null)
         {
-            return target is ShelfController shelf && !shelf.IsFull();
+            if (held.GetComponent<ScannerGun>() != null) return false;
+
+            if (held.GetComponent<MoneyStack>() != null)
+            {
+                return target is CheckoutCounter;
+            }
+            if (target is ShelfController shelf) return !shelf.IsFull();
+            return false;
         }
-        return !(target is ShelfController);
+
+        if (target is ShelfController) return false;
+        if (target is CheckoutCounter) return false;
+
+        // Không cho lấy đồ thẳng từ tay customer (chỉ scanner mới scan được).
+        if (target is ItemObject item && item.GetComponentInParent<CustomerAgent>() != null) return false;
+
+        return true;
     }
 
     /// <summary>Lấy tên item để show trên PickupGuide. Trả null nếu target không phải item.</summary>
@@ -135,6 +154,14 @@ public class PlayerInteract : MonoBehaviour
 
     private void TryInteract()
     {
+        // Cầm scanner: ưu tiên scan thay vì interact với target.
+        if (_playerCarry.HeldObject != null &&
+            _playerCarry.HeldObject.TryGetComponent<ScannerGun>(out var scanner))
+        {
+            scanner.TryScan(_cameraTransform.position, _cameraTransform.forward);
+            return;
+        }
+
         Ray ray = new Ray(_cameraTransform.position, _cameraTransform.forward);
         if (Physics.Raycast(ray, out RaycastHit hit, _interactRadius, _interactLayer, QueryTriggerInteraction.Ignore))
         {

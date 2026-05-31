@@ -3,19 +3,31 @@ using UnityEngine;
 using UnityEngine.AI;
 
 /// <summary>
-/// State machine: GoToShelf → PickItem → WaitInQueue (tại Checkout) → GoToExit → Despawn.
-/// Nếu không có checkout hoặc không có hàng, đi thẳng ra exit.
+/// State machine: GoToShelf → PickItem → WaitInQueue → WaitForScanAndPay →
+/// (LeaveHappy | AngryLeave) → Done.
+/// Customer giữ items trong tay xuyên suốt; scanner gun lấy item khỏi tay.
+/// Patience hết → quăng items đang cầm về phía trước rồi bỏ về.
 /// </summary>
 [RequireComponent(typeof(NavMeshAgent))]
 public class CustomerAgent : MonoBehaviour
 {
-    private enum State { GoToShelf, PickItem, WaitInQueue, GoToExit, Done }
+    private enum State { GoToShelf, PickItem, WaitInQueue, WaitForScanAndPay, LeaveHappy, AngryLeave, Done }
 
     [Header("Behavior")]
     [SerializeField] private float _pickItemDuration = 1.5f;
-    [Tooltip("Tốc độ xoay (deg/s) khi đứng xếp hàng — quay mặt về phía counter.")]
+    [SerializeField] private int _minPickCount = 1;
+    [SerializeField] private int _maxPickCount = 3;
     [SerializeField] private float _facingTurnSpeed = 540f;
     [SerializeField] private Transform _hand;
+    [SerializeField] private float _handStackOffsetY = 0.15f;
+
+    [Header("Wallet")]
+    [Tooltip("Tiền dư khách trả thêm (random 0..max). Player phải đưa change này.")]
+    [SerializeField] private int _maxExtraPay = 30;
+
+    [Header("Angry Throw")]
+    [SerializeField] private float _throwForce = 12f;
+    [SerializeField] private float _throwUpwardBias = 0.4f;
 
     [Header("Runtime (assigned by spawner)")]
     [SerializeField] private Transform _exitPoint;
@@ -24,19 +36,13 @@ public class CustomerAgent : MonoBehaviour
     private NavMeshAgent _agent;
     private State _state;
     private ShelfController _targetShelf;
-    private ItemObject _carriedItem;
+    private readonly List<ItemObject> _heldItems = new List<ItemObject>();
     private float _pickTimer;
     private int _queueIndex = -1;
+    private bool _hasPaid;
 
-    /// <summary>True khi khách đang ở đầu hàng và đã đứng vào vị trí.</summary>
-    public bool IsReadyToBeServed
-        => _state == State.WaitInQueue && _queueIndex == 0 && HasArrived();
-
-    public int GetCarriedItemPrice()
-    {
-        if (_carriedItem == null || _carriedItem.ItemData == null) return 0;
-        return Mathf.RoundToInt(_carriedItem.ItemData.sellPrice);
-    }
+    public List<ItemObject> HeldItems => _heldItems;
+    
 
     public void Init(Transform exitPoint, CheckoutCounter checkout)
     {
@@ -58,24 +64,13 @@ public class CustomerAgent : MonoBehaviour
     {
         switch (_state)
         {
-            case State.GoToShelf:    TickGoToShelf();    break;
-            case State.PickItem:     TickPickItem();     break;
-            case State.WaitInQueue:  TickWaitInQueue();  break;
-            case State.GoToExit:     TickGoToExit();     break;
+            case State.GoToShelf:           TickGoToShelf();           break;
+            case State.PickItem:            TickPickItem();            break;
+            case State.WaitInQueue:         TickWaitInQueue();         break;
+            case State.WaitForScanAndPay:   TickWaitForScanAndPay();   break;
+            case State.LeaveHappy:          TickLeaving();             break;
+            case State.AngryLeave:          TickLeaving();             break;
         }
-    }
-
-    /// <summary>Khi đứng yên trong hàng → xoay mặt về phía counter.</summary>
-    private void TickWaitInQueue()
-    {
-        if (!HasArrived() || _checkout == null) return;
-
-        Vector3 dir = _checkout.transform.position - transform.position;
-        dir.y = 0f;
-        if (dir.sqrMagnitude < 0.0001f) return;
-
-        Quaternion target = Quaternion.LookRotation(dir);
-        transform.rotation = Quaternion.RotateTowards(transform.rotation, target, _facingTurnSpeed * Time.deltaTime);
     }
 
     // ───────── Shelf ─────────
@@ -83,7 +78,7 @@ public class CustomerAgent : MonoBehaviour
     {
         _state = State.GoToShelf;
         _targetShelf = FindStockedShelf();
-        if (_targetShelf == null) { EnterGoToExit(); return; }
+        if (_targetShelf == null) { EnterAngryLeaveSilent(); return; }
         _agent.SetDestination(_targetShelf.transform.position);
     }
 
@@ -105,29 +100,30 @@ public class CustomerAgent : MonoBehaviour
         _pickTimer -= Time.deltaTime;
         if (_pickTimer > 0f) return;
 
-        ItemObject taken = _targetShelf != null ? _targetShelf.TakeItem() : null;
-        if (taken != null)
+        int want = Random.Range(_minPickCount, _maxPickCount + 1);
+        for (int i = 0; i < want; i++)
         {
-            _carriedItem = taken;
-            AttachItemToHand(taken);
-            EnterWaitInQueue();
+            if (_targetShelf == null || _targetShelf.IsEmpty()) break;
+            ItemObject taken = _targetShelf.TakeItem();
+            if (taken == null) break;
+            AttachItemToHand(taken, _heldItems.Count);
+            _heldItems.Add(taken);
         }
-        else
-        {
-            EnterGoToExit();
-        }
+
+        if (_heldItems.Count > 0) EnterWaitInQueue();
+        else EnterAngryLeaveSilent();
     }
 
-    private void AttachItemToHand(ItemObject item)
+    private void AttachItemToHand(ItemObject item, int stackIndex)
     {
         if (item.TryGetComponent<Rigidbody>(out var rb))
         {
             rb.isKinematic = true;
-            rb.detectCollisions = false;
+            rb.detectCollisions = true; // scanner cần raycast hit được
         }
         Transform parent = _hand != null ? _hand : transform;
         item.transform.SetParent(parent);
-        item.transform.localPosition = Vector3.zero;
+        item.transform.localPosition = Vector3.up * (stackIndex * _handStackOffsetY);
         item.transform.localRotation = Quaternion.identity;
     }
 
@@ -135,11 +131,24 @@ public class CustomerAgent : MonoBehaviour
     private void EnterWaitInQueue()
     {
         if (_checkout == null) _checkout = Object.FindFirstObjectByType<CheckoutCounter>();
-        if (_checkout == null) { EnterGoToExit(); return; }
+        if (_checkout == null) { EnterAngryLeaveSilent(); return; }
 
         _state = State.WaitInQueue;
         _queueIndex = _checkout.JoinQueue(this);
         MoveToQueueSpot();
+    }
+
+    private void TickWaitInQueue()
+    {
+        FaceCounter();
+        if (_queueIndex != 0 || !HasArrived()) return;
+        if (_checkout == null || _checkout.ActiveCustomer != null) return;
+
+        if (_checkout.TryStartSession(this, _heldItems))
+        {
+            _state = State.WaitForScanAndPay;
+            _hasPaid = false;
+        }
     }
 
     private void MoveToQueueSpot()
@@ -148,41 +157,113 @@ public class CustomerAgent : MonoBehaviour
         if (spot != null) _agent.SetDestination(spot.position);
     }
 
-    /// <summary>Gọi từ CheckoutCounter khi hàng dịch lên (khách trước rời).</summary>
     public void OnQueuePositionChanged(int newIndex)
     {
         _queueIndex = newIndex;
         if (_state == State.WaitInQueue) MoveToQueueSpot();
     }
 
-    /// <summary>Gọi từ CheckoutCounter sau khi player scan xong.</summary>
-    public void OnServed()
+    // ───────── Wait for scan & pay ─────────
+    private void TickWaitForScanAndPay()
     {
-        if (_carriedItem != null)
+        FaceCounter();
+
+        var session = _checkout?.CurrentSession;
+        if (session == null) return;
+
+        // Đồng bộ _heldItems với session.Unscanned (items đã bị scan đã được counter tween đi).
+        SyncHeldItemsFromSession(session);
+
+        // Khi hết hàng trong tay → tự trả tiền (có thể dư).
+        if (!_hasPaid && session.AllScanned)
         {
-            Destroy(_carriedItem.gameObject);
-            _carriedItem = null;
+            int extra = Random.Range(0, _maxExtraPay + 1);
+            int payAmount = session.Subtotal + extra;
+            session.RegisterPayment(payAmount);
+            _hasPaid = true;
         }
-        _queueIndex = -1;
-        EnterGoToExit();
+        // session.IsComplete → counter sẽ gọi TriggerLeaveHappy() lên customer này.
     }
 
-    // ───────── Exit ─────────
-    private void EnterGoToExit()
+    private void SyncHeldItemsFromSession(CheckoutSession session)
     {
-        _state = State.GoToExit;
+        for (int i = _heldItems.Count - 1; i >= 0; i--)
+        {
+            ItemObject it = _heldItems[i];
+            if (it == null || !session.Unscanned.Contains(it))
+            {
+                _heldItems.RemoveAt(i);
+            }
+        }
+    }
+
+    // ───────── Leave (happy / angry) ─────────
+    public void TriggerLeaveHappy()
+    {
+        if (_state == State.LeaveHappy || _state == State.AngryLeave || _state == State.Done) return;
+        _state = State.LeaveHappy;
         if (_exitPoint != null) _agent.SetDestination(_exitPoint.position);
     }
 
-    private void TickGoToExit()
+    public void TriggerAngryLeave()
+    {
+        if (_state == State.AngryLeave || _state == State.Done) return;
+        ThrowHeldItems();
+        _state = State.AngryLeave;
+        if (_exitPoint != null) _agent.SetDestination(_exitPoint.position);
+    }
+
+    private void EnterAngryLeaveSilent()
+    {
+        // Edge case: không vào được flow checkout (no shelf, no exit) → bỏ về không quăng.
+        _state = State.AngryLeave;
+        if (_exitPoint != null) _agent.SetDestination(_exitPoint.position);
+    }
+
+    private void ThrowHeldItems()
+    {
+        Vector3 dir = (transform.forward + Vector3.up * _throwUpwardBias).normalized;
+        for (int i = 0; i < _heldItems.Count; i++)
+        {
+            ItemObject item = _heldItems[i];
+            if (item == null) continue;
+
+            item.transform.SetParent(null);
+            if (item.TryGetComponent<Rigidbody>(out var rb))
+            {
+                rb.isKinematic = false;
+                rb.detectCollisions = true;
+                rb.AddForce(dir * _throwForce, ForceMode.Impulse);
+                rb.AddTorque(Random.insideUnitSphere * _throwForce, ForceMode.Impulse);
+            }
+        }
+        _heldItems.Clear();
+    }
+
+    private void TickLeaving()
     {
         if (!HasArrived()) return;
-        if (_carriedItem != null) Destroy(_carriedItem.gameObject);
+        // Despawn còn items đang cầm (chỉ happy mới còn — customer đem theo "túi" tượng trưng).
+        for (int i = 0; i < _heldItems.Count; i++)
+        {
+            if (_heldItems[i] != null) Destroy(_heldItems[i].gameObject);
+        }
+        _heldItems.Clear();
         _state = State.Done;
         Destroy(gameObject);
     }
 
     // ───────── Helpers ─────────
+    private void FaceCounter()
+    {
+        if (_checkout == null) return;
+        Vector3 dir = _checkout.transform.position - transform.position;
+        dir.y = 0f;
+        if (dir.sqrMagnitude < 0.0001f) return;
+        Quaternion target = Quaternion.LookRotation(dir);
+        transform.rotation = Quaternion.RotateTowards(transform.rotation, target, _facingTurnSpeed * Time.deltaTime);
+    }
+
     private bool HasArrived()
     {
         if (_agent.pathPending) return false;

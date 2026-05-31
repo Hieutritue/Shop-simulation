@@ -75,55 +75,133 @@ Shelf (ShelfController)
 **Ưu tiên: ⭐⭐⭐⭐⭐**
 
 ### Mục tiêu
-Khách hàng tự động đi vào cửa hàng, chọn đồ, xếp hàng ở quầy tính tiền.
+Khách tự đi vào, chọn đồ, mang ra quầy đặt lên bàn, chờ player scan + thanh toán. Khách có **patience timer** — chờ quá lâu sẽ giận, **quăng mạnh đồ đang cầm về phía trước rồi bỏ về**.
 
 ### Scripts cần tạo
 | File | Mô tả |
 |---|---|
-| `CustomerAgent.cs` | State machine: `Enter → GoToShelf → PickItem → GoToCheckout → WaitInQueue → Leave` |
-| `CustomerSpawner.cs` | Spawn khách theo timer hoặc theo số lượng khách tối đa |
-| `CustomerQueue.cs` | Singleton quản lý hàng chờ ở quầy tính tiền |
+| `CustomerAgent.cs` | State machine + patience timer + payment behavior |
+| `CustomerSpawner.cs` | Spawn theo timer hoặc số lượng tối đa |
+| `CustomerQueue.cs` | Singleton quản lý hàng chờ ở quầy |
+| `CustomerWallet.cs` | Tiền customer mang theo (random; có thể trả dư) |
 
 ### Customer State Machine
 ```
-[Spawn tại cửa vào]
+[Enter — spawn cửa vào]
         ↓
-[GoToShelf] → NavMesh đến ShelfController ngẫu nhiên còn hàng
+[GoToShelf]              → NavMesh đến shelf còn hàng
         ↓
-[PickItem] → Chờ 1-2 giây (animation giả), lấy item từ Shelf
+[PickItem]               → Cầm 1-3 món (theo random)
         ↓
-[GoToCheckout] → NavMesh đến vị trí quầy tính tiền
+[GoToCheckout]           → NavMesh đến quầy
         ↓
-[WaitInQueue] → Xếp hàng theo thứ tự (Queue position offset)
+[WaitInQueue]            → Xếp slot theo thứ tự (offset position)
+        ↓ (đến đầu hàng)
+[PlaceItemsOnCounter]    → Đặt từng món vào _dropZone quầy
         ↓
-[Leave] → NavMesh ra cửa → Despawn
+[WaitForScanAndPay]      → Patience timer countdown
+        │
+        ├─ player scan đủ + (nếu có) đưa change đúng:
+        │       ↓
+        │  [Pay] → Đưa tiền (có thể dư) → nhận change → mất túi đồ
+        │       ↓
+        │  [LeaveHappy] → ra cửa → Despawn
+        │
+        └─ patience = 0:
+                ↓
+           [AngryLeave]   → Rigidbody.AddForce(forward * THROW_FORCE, Impulse)
+                              lên item đang cầm → unparent → ra cửa → Despawn
 ```
 
+### Patience & Throw Behavior
+- Mỗi khách có `patience` random (e.g., 20-40s) — countdown ngay khi vào `WaitForScanAndPay`
+- Optional UI: bar trên đầu (làm ở MODULE 8)
+- Khi `patience <= 0`:
+  - Nếu còn cầm item: bật `Rigidbody.isKinematic = false`, `detectCollisions = true`, `AddForce(transform.forward * THROW_FORCE, ForceMode.Impulse)`, unparent
+  - Đồ đã đặt trên quầy: BỎ LẠI (player phải dọn hoặc auto-cleanup sau N giây)
+  - State → `AngryLeave` → NavMesh ra cửa → Despawn
+
+### Wallet
+- `CustomerWallet`: random tiền (e.g., $50-200) bằng các mệnh giá có sẵn ($1, $5, $10, $20, $50)
+- Khi thanh toán: chọn tổ hợp tiền ≥ subtotal → đặt lên quầy hoặc đưa tay player
+- Player có nghĩa vụ đưa change đúng (`paid - subtotal`)
+
 ### NavMesh Setup
-- Dùng **Unity NavMesh** (AI Navigation package)
-- Bake NavMesh trên scene một lần
-- Khách dùng `NavMeshAgent` component
+- Dùng **Unity NavMesh** (AI Navigation package), bake một lần
+- Khách dùng `NavMeshAgent`
 
 ---
 
-## 💳 MODULE 4 — Checkout System (Quầy tính tiền)
+## 💳 MODULE 4 — Checkout System (Quầy + Scanner Gun + Cash Drawer)
 **Ưu tiên: ⭐⭐⭐⭐⭐**
 
 ### Mục tiêu
-Player đứng sau quầy, click để "quét" từng món hàng của khách, tiền được cộng vào cửa hàng.
+Player cầm máy quét → scan từng món customer đặt lên quầy → UI hiện giá + tổng → customer đưa tiền (có thể dư) → player lấy mệnh giá từ ngăn kéo tiền để **đưa lại tiền thừa** cho customer.
 
 ### Scripts cần tạo
 | File | Mô tả |
 |---|---|
-| `CheckoutCounter.cs` | Quầy tính tiền: nhận khách đầu hàng, hiển thị các item cần quét |
-| `CheckoutUI.cs` | UI hiển thị danh sách item, tổng tiền, nút "Confirm/Quét" |
-| `MoneyManager.cs` | Singleton quản lý tổng tiền của cửa hàng |
+| `CheckoutCounter.cs` | Quầy: drop zone đồ chưa scan + scanned zone + ref scanner mặc định |
+| `ScannerGun.cs` | Item cầm tay; click vào ItemObject trên quầy để scan |
+| `CheckoutSession.cs` | State 1 phiên thanh toán: items đã scan, subtotal, paid, change còn nợ |
+| `CheckoutUI.cs` | Danh sách item scanned + giá + subtotal + paid + change owed |
+| `CashDrawer.cs` | Ngăn kéo chứa MoneyStack theo mệnh giá; player nhặt để đưa change |
+| `MoneyStack.cs` | Item cầm tay; `denomination` ($1/$5/$10/$20/$50); có thể stack |
+| `MoneyManager.cs` | Singleton tiền cửa hàng (giữ subtotal sau khi trả change) |
 
-### Flow
-1. Khách đến đầu hàng → `CheckoutCounter` nhận khách, lấy list item của khách
-2. Hiện UI: danh sách item + giá từng món + tổng tiền
-3. Player click **"Tính tiền"** → `MoneyManager.AddMoney(total)` → hiệu ứng tiền bay lên
-4. Khách nhận lại "túi đồ" (optional) → State chuyển sang `Leave`
+### Flow chi tiết
+1. **Đặt đồ:** Customer state `PlaceItemsOnCounter` → snap từng `ItemObject` vào `_dropZone[i]` (tween arc nhẹ như MODULE 6).
+2. **Cầm scanner:** `ScannerGun` là `IInteractable` (nằm trên quầy). Player Interact → cầm như item thường. Tay player giờ đang cầm scanner.
+3. **Scan từng món:** Click trái khi đang cầm scanner + raycast trúng `ItemObject` trong `_dropZone` → `CheckoutSession.Scan(item)`:
+   - Cộng `item.ItemData.sellPrice` vào `subtotal`
+   - Move item sang `_scannedZone` (tween)
+   - UI cập nhật dòng item + tick
+4. **Customer trả tiền:** Khi `unscanned.Count == 0`, customer state → `Pay` → đặt `MoneyStack` (mệnh giá customer chọn tổ hợp ≥ subtotal) vào `_paymentZone` quầy. `CheckoutSession.paid += $Y`.
+5. **Đưa change:** UI hiện `change = paid - subtotal`. Nếu `change > 0`:
+   - Player Interact với `CashDrawer` → nhặt `MoneyStack` mệnh giá phù hợp
+   - Đặt MoneyStack vào `_changeZone` quầy (hoặc click customer) → cộng dồn
+   - Khi `change <= 0`: customer state → `LeaveHappy`, cầm túi đồ (các item ở `_scannedZone`) đi ra
+6. **Kết toán:**
+   - `MoneyManager.Money += subtotal` (lãi đúng)
+   - Money đã đưa change rút từ `CashDrawer` (kho quỹ cửa hàng)
+
+### Zones (Transform reference trong CheckoutCounter)
+| Zone | Mục đích |
+|---|---|
+| `_dropZone[]` | Customer đặt đồ; scanner gun scan từ đây |
+| `_scannedZone[]` | Đồ đã scan; customer mang đi khi `LeaveHappy` |
+| `_paymentZone` | Customer đặt MoneyStack trả tiền |
+| `_changeZone` | Player đặt MoneyStack đưa change |
+
+### CheckoutUI Layout
+```
+┌──────────────────────────────────┐
+│ Phiên thanh toán — Khách #03    │
+├──────────────────────────────────┤
+│ ✓ Táo              $5            │
+│ ✓ Sữa             $12            │
+│ □ Bánh mì          $3 (chưa scan)│
+├──────────────────────────────────┤
+│ Subtotal:         $17            │
+│ Customer paid:    $20            │
+│ Change owed:       $3            │
+│                                  │
+│ ⏱ Patience: ████░░░ 22s         │
+└──────────────────────────────────┘
+```
+
+### Patience / Angry Exit (liên kết MODULE 3)
+- `CheckoutSession` countdown patience của customer hiện tại
+- Hết giờ → customer `AngryLeave` (xem MODULE 3) → session bỏ → đồ trên quầy thành "rác" cần dọn
+- UI ẩn / chuyển sang trạng thái idle
+
+### CashDrawer
+- Object cố định trên quầy, chứa N slot mệnh giá ($1, $5, $10, $20, $50)
+- Player Interact → có thể chọn 1 mệnh giá để rút 1 `MoneyStack`
+- Mỗi MoneyStack là item cầm được — giống `ItemObject` nhưng có `denomination`
+
+### MoneyStack
+- Có thể "merge" khi cầm thêm (cùng mệnh giá → tăng count). Optional, KISS: 1 stack = 1 lần đưa.
 
 ---
 
@@ -263,10 +341,15 @@ Assets/_Scripts/
 ├── Customer/
 │   ├── CustomerAgent.cs
 │   ├── CustomerSpawner.cs
-│   └── CustomerQueue.cs
+│   ├── CustomerQueue.cs
+│   └── CustomerWallet.cs
 ├── Checkout/
 │   ├── CheckoutCounter.cs
-│   └── CheckoutUI.cs
+│   ├── CheckoutSession.cs
+│   ├── CheckoutUI.cs
+│   ├── ScannerGun.cs
+│   ├── CashDrawer.cs
+│   └── MoneyStack.cs
 ├── Player/
 │   ├── PlayerController.cs
 │   ├── PlayerInteract.cs
