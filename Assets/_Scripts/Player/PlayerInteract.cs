@@ -111,10 +111,9 @@ public class PlayerInteract : MonoBehaviour
 
     /// <summary>
     /// Cầm ItemObject thường → chỉ Shelf còn slot.
-    /// Cầm MoneyStack → chỉ CheckoutCounter (đưa change).
-    /// Cầm ScannerGun → không có interact target (click sẽ delegate sang TryScan).
-    /// Không cầm: pickup được mọi target trừ Shelf/Counter (cần item phù hợp mới đặt được).
-    /// Đồ trong tay customer không được pick lên (chỉ scanner mới chạm tới).
+    /// Cầm MoneyStack → chỉ Customer đang active (đưa tiền).
+    /// Cầm ScannerGun → chỉ ItemObject trong tay Customer đang active (highlight để scan).
+    /// Không cầm: pickup được mọi target trừ Shelf/Counter/Customer/đồ-trong-tay-customer.
     /// </summary>
     private bool CanInteractWith(IInteractable target)
     {
@@ -123,20 +122,29 @@ public class PlayerInteract : MonoBehaviour
         GameObject held = _playerCarry.HeldObject;
         if (held != null)
         {
-            if (held.GetComponent<ScannerGun>() != null) return false;
+            if (held.GetComponent<ScannerGun>() != null)
+            {
+                // Highlight item trong tay customer đang phục vụ (scan target).
+                if (target is ItemObject scanItem)
+                {
+                    var owner = scanItem.GetComponentInParent<CustomerAgent>();
+                    return owner != null && owner.IsActiveInSession;
+                }
+                return false;
+            }
 
             if (held.GetComponent<MoneyStack>() != null)
             {
-                return target is CheckoutCounter;
+                return target is CustomerAgent customer && customer.IsActiveInSession;
             }
             if (target is ShelfController shelf) return !shelf.IsFull();
             return false;
         }
 
         if (target is ShelfController) return false;
-        if (target is CheckoutCounter) return false;
+        if (target is CheckoutCounter counter) return counter.CurrentSession != null;
+        if (target is CustomerAgent) return false;
 
-        // Không cho lấy đồ thẳng từ tay customer (chỉ scanner mới scan được).
         if (target is ItemObject item && item.GetComponentInParent<CustomerAgent>() != null) return false;
 
         return true;
@@ -173,6 +181,25 @@ public class PlayerInteract : MonoBehaviour
     private void TryDrop()
     {
         if (_playerCarry.HeldObject == null) return;
+
+        GameObject held = _playerCarry.HeldObject;
+
+        // MoneyStack → hủy luôn (trả về drawer ngầm).
+        if (held.GetComponent<MoneyStack>() != null)
+        {
+            _playerCarry.ClearHeldObject();
+            Destroy(held);
+            return;
+        }
+
+        // ScannerGun → reset về home position trên quầy.
+        if (held.TryGetComponent<ScannerGun>(out var scanner))
+        {
+            _playerCarry.ClearHeldObject();
+            scanner.ReturnHome();
+            return;
+        }
+
         DropHeldObject();
     }
 

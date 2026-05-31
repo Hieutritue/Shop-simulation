@@ -20,6 +20,13 @@ namespace CodeMonkey.Toolkit.TFirstPersonController {
         private CharacterController characterController;
         private float cameraVerticalAngle;
         private float verticalMovement;
+        private bool movementLocked = false;
+
+
+        public void LockMovement(bool locked) {
+            movementLocked = locked;
+            if (locked) verticalMovement = 0f;
+        }
 
 
         private void Awake() {
@@ -57,6 +64,9 @@ namespace CodeMonkey.Toolkit.TFirstPersonController {
             }
             inputVector = inputVector.normalized;
 
+            // Khóa di chuyển khi player đang "ngồi" ở checkout counter — vẫn cho mouse look.
+            if (movementLocked) inputVector = Vector2.zero;
+
             Vector3 moveVector = new Vector3(inputVector.x, 0, inputVector.y);
             moveVector.y = verticalMovement;
 
@@ -83,7 +93,7 @@ namespace CodeMonkey.Toolkit.TFirstPersonController {
             playerCamera.transform.localEulerAngles = new Vector3(cameraVerticalAngle, 0, 0);
 
             // Test for Input and if character can Jump
-            if (characterController.isGrounded && Input.GetKey(KeyCode.Space)) {
+            if (!movementLocked && characterController.isGrounded && Input.GetKey(KeyCode.Space)) {
                 float jumpAmount = 1.8f;
                 verticalMovement = jumpAmount;
             }

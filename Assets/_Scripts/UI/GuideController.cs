@@ -19,10 +19,13 @@ public class GuideController : MonoBehaviour
     [SerializeField] private GameObject _guideleft;
     [SerializeField] private TMP_Text _guideLeftLabel;
     [SerializeField] private GameObject _guideright;
+    [SerializeField] private TMP_Text _guideRightLabel;
 
     [Header("Action labels")]
     [SerializeField] private string _labelPlaceOnShelf = "Đặt đồ";
     [SerializeField] private string _labelCheckout = "Tính tiền";
+    [SerializeField] private string _labelDrop = "Thả đồ";
+    [SerializeField] private string _labelCancel = "Hủy";
 
     [Header("Optional refs (auto-find nếu để trống)")]
     [SerializeField] private PlayerInteract _playerInteract;
@@ -65,6 +68,14 @@ public class GuideController : MonoBehaviour
         if (_guideleft != null) _guideleft.SetActive(showLeft);
         if (showLeft && _guideLeftLabel != null) _guideLeftLabel.text = leftText;
         if (_guideright != null) _guideright.SetActive(showRight);
+
+        if (showRight && _guideRightLabel != null)
+        {
+            GameObject held = _playerCarry.HeldObject;
+            bool isCancel = held != null &&
+                (held.GetComponent<MoneyStack>() != null || held.GetComponent<ScannerGun>() != null);
+            _guideRightLabel.text = isCancel ? _labelCancel : _labelDrop;
+        }
     }
 
     private void HideAll()

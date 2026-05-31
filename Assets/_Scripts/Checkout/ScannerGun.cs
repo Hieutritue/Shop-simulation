@@ -1,17 +1,38 @@
 using UnityEngine;
 
 /// <summary>
-/// Súng quét: pickupable. Khi player đang cầm, PlayerInteract.TryInteract sẽ delegate sang TryScan
-/// (raycast forward; nếu trúng ItemObject thuộc CheckoutSession active → session.TryScan).
+/// Súng quét pickupable + smooth follow giống ItemObject.
+/// Khi player cầm, PlayerInteract.TryInteract delegate sang TryScan (raycast forward).
+/// Right-click khi cầm → ReturnHome (về vị trí ban đầu trên quầy).
 /// </summary>
 public class ScannerGun : MonoBehaviour, IInteractable
 {
+    [Header("Scan")]
     [SerializeField] private float _scanRange = 3f;
     [SerializeField] private LayerMask _scanLayer = ~0;
     [SerializeField] private CheckoutCounter _counter;
 
+    [Header("Follow Settings")]
+    [SerializeField] private float _positionSmoothTime = 0.08f;
+    [SerializeField] private float _rotationSpeed = 10f;
+
+    private Transform _carryTarget;
+    private bool _isCarried = false;
+    private Vector3 _velocity = Vector3.zero;
+    private Rigidbody _rb;
+    private PlayerCarry _carryingPlayer;
+
+    // Home state — captured Awake() để ReturnHome reset chuẩn.
+    private Transform _homeParent;
+    private Vector3 _homeLocalPos;
+    private Quaternion _homeLocalRot;
+
     private void Awake()
     {
+        _rb = GetComponent<Rigidbody>();
+        _homeParent = transform.parent;
+        _homeLocalPos = transform.localPosition;
+        _homeLocalRot = transform.localRotation;
         if (_counter == null) _counter = Object.FindFirstObjectByType<CheckoutCounter>();
     }
 
@@ -21,16 +42,51 @@ public class ScannerGun : MonoBehaviour, IInteractable
 
         player.CarryObject(this.gameObject);
 
-        if (TryGetComponent<Rigidbody>(out var rb))
+        if (_rb != null)
         {
-            rb.isKinematic = true;
-            rb.detectCollisions = false;
+            _rb.isKinematic = true;
+            _rb.detectCollisions = false;
         }
 
-        Transform anchor = player.CarryPoint != null ? player.CarryPoint : player.transform;
-        transform.SetParent(anchor);
-        transform.localPosition = Vector3.zero;
-        transform.localRotation = Quaternion.identity;
+        _carryTarget = player.CarryPoint;
+        _carryingPlayer = player;
+        _isCarried = true;
+        _velocity = Vector3.zero;
+    }
+
+    private void LateUpdate()
+    {
+        if (!_isCarried || _carryTarget == null) return;
+
+        transform.position = Vector3.SmoothDamp(transform.position, _carryTarget.position, ref _velocity, _positionSmoothTime);
+        transform.rotation = Quaternion.Slerp(transform.rotation, _carryTarget.rotation, Time.deltaTime * _rotationSpeed);
+
+        if (_carryingPlayer != null && _carryingPlayer.HeldObject != this.gameObject)
+        {
+            StopCarry();
+        }
+    }
+
+    public void StopCarry()
+    {
+        _isCarried = false;
+        _carryTarget = null;
+        _carryingPlayer = null;
+        _velocity = Vector3.zero;
+    }
+
+    /// <summary>Reset scanner về vị trí ban đầu trên quầy (gọi từ right-click).</summary>
+    public void ReturnHome()
+    {
+        StopCarry();
+        if (_rb != null)
+        {
+            _rb.isKinematic = true;
+            _rb.detectCollisions = false;
+        }
+        if (_homeParent != null) transform.SetParent(_homeParent);
+        transform.localPosition = _homeLocalPos;
+        transform.localRotation = _homeLocalRot;
     }
 
     /// <returns>true nếu scan thành công 1 item.</returns>

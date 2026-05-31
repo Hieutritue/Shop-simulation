@@ -10,14 +10,14 @@ using UnityEngine.AI;
 /// Patience hết → quăng items đang cầm về phía trước rồi bỏ về.
 /// </summary>
 [RequireComponent(typeof(NavMeshAgent))]
-public class CustomerAgent : MonoBehaviour
+public class CustomerAgent : MonoBehaviour, IInteractable
 {
     private enum State { GoToShelf, PickItem, WaitInQueue, WaitForScanAndPay, LeaveHappy, AngryLeave, Done }
 
     [Header("Behavior")]
     [SerializeField] private float _pickItemDuration = 1.5f;
     [SerializeField] private int _minPickCount = 1;
-    [SerializeField] private int _maxPickCount = 3;
+    [SerializeField] private int _maxPickCount = 1;
     [SerializeField] private float _facingTurnSpeed = 540f;
     [SerializeField] private Transform _hand;
     [SerializeField] private float _handStackOffsetY = 0.15f;
@@ -43,7 +43,24 @@ public class CustomerAgent : MonoBehaviour
     private bool _hasPaid;
 
     public List<ItemObject> HeldItems => _heldItems;
-    
+
+    /// <summary>True khi customer này là khách đang phục vụ ở session active của counter.</summary>
+    public bool IsActiveInSession =>
+        _checkout != null && _checkout.CurrentSession != null && _checkout.CurrentSession.Customer == this;
+
+    // Player cầm MoneyStack click → đưa tiền cho customer này. Chỉ valid khi đang trong session.
+    public void Interact(PlayerCarry player)
+    {
+        if (player == null || player.HeldObject == null) return;
+        if (!player.HeldObject.TryGetComponent<MoneyStack>(out var money)) return;
+        if (!IsActiveInSession) return;
+
+        _checkout.CurrentSession.RegisterChangeGiven(money.Denomination);
+
+        GameObject obj = player.HeldObject;
+        player.ClearHeldObject();
+        Destroy(obj);
+    }
 
     public void Init(Transform exitPoint, CheckoutCounter checkout)
     {

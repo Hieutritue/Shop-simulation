@@ -26,7 +26,8 @@ public class CheckoutUI : MonoBehaviour
         if (_counter == null) return;
         var session = _counter.CurrentSession;
 
-        if (session == null)
+        // Chỉ hiện panel khi player đã engage (ngồi ở quầy) + có session.
+        if (session == null || !_counter.IsPlayerEngaged)
         {
             if (_root != null && _root.activeSelf) _root.SetActive(false);
             return;

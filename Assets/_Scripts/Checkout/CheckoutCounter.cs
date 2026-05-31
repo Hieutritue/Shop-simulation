@@ -1,4 +1,5 @@
 using System.Collections.Generic;
+using CodeMonkey.Toolkit.TFirstPersonController;
 using PrimeTween;
 using UnityEngine;
 
@@ -19,12 +20,18 @@ public class CheckoutCounter : MonoBehaviour, IInteractable
     [Tooltip("Slot đặt đồ đã scan (visual). Tween từ tay customer → đây.")]
     [SerializeField] private Transform[] _scannedZone;
     [SerializeField] private Transform _changeZone;
+    [Tooltip("Vị trí + hướng player bị snap khi engage làm việc ở quầy.")]
+    [SerializeField] private Transform _playerWorkSpot;
 
     [Header("Session")]
     [SerializeField] private float _defaultPatience = 30f;
 
     private readonly List<CustomerAgent> _queue = new List<CustomerAgent>();
     private int _scannedSlotCursor;
+    private GameObject _engagedPlayer;
+    private FirstPersonController _engagedFpc;
+
+    public bool IsPlayerEngaged => _engagedPlayer != null;
 
     public CheckoutSession CurrentSession { get; private set; }
     public CustomerAgent ActiveCustomer => CurrentSession?.Customer;
@@ -160,24 +167,49 @@ public class CheckoutCounter : MonoBehaviour, IInteractable
         if (CurrentSession?.Customer != null) LeaveQueue(CurrentSession.Customer);
         CurrentSession = null;
         _scannedSlotCursor = 0;
+
+        // Khách rời → tự nhả player khỏi work spot.
+        DisengagePlayer();
     }
 
-    // ───────── Player IInteractable: chỉ chấp nhận đặt MoneyStack vào ChangeZone ─────────
+    // ───────── Lock-in player vào work spot ─────────
+    public void EngagePlayer(GameObject playerGO)
+    {
+        if (playerGO == null || _engagedPlayer != null) return;
+        if (_playerWorkSpot == null)
+        {
+            Debug.LogWarning("[Checkout] _playerWorkSpot chưa assign.");
+            return;
+        }
+
+        _engagedPlayer = playerGO;
+        _engagedFpc = playerGO.GetComponent<FirstPersonController>();
+
+        // Snap position+rotation, tạm tắt CharacterController để teleport.
+        var cc = playerGO.GetComponent<CharacterController>();
+        if (cc != null) cc.enabled = false;
+        playerGO.transform.SetPositionAndRotation(_playerWorkSpot.position, _playerWorkSpot.rotation);
+        if (cc != null) cc.enabled = true;
+
+        if (_engagedFpc != null) _engagedFpc.LockMovement(true);
+    }
+
+    public void DisengagePlayer()
+    {
+        if (_engagedPlayer == null) return;
+        if (_engagedFpc != null) _engagedFpc.LockMovement(false);
+        _engagedPlayer = null;
+        _engagedFpc = null;
+    }
+
+    // ───────── Player IInteractable ─────────
+    // Không cầm gì + có session đang chờ → engage (lock-in vào work spot, UI panel hiện).
+    // Đưa change → click vào Customer (xem CustomerAgent.Interact), không qua counter.
     public void Interact(PlayerCarry player)
     {
-        if (player == null || player.HeldObject == null) return;
-        if (!player.HeldObject.TryGetComponent<MoneyStack>(out var money)) return;
+        if (player == null) return;
+        if (player.HeldObject != null) return;
         if (CurrentSession == null) return;
-
-        CurrentSession.RegisterChangeGiven(money.Denomination);
-
-        GameObject obj = player.HeldObject;
-        player.ClearHeldObject();
-        obj.transform.SetParent(_changeZone != null ? _changeZone : transform);
-        obj.transform.localPosition = Vector3.zero;
-        obj.transform.localRotation = Quaternion.identity;
-
-        // Trả change về drawer (visually) — destroy sau short delay.
-        Destroy(obj, 0.8f);
+        EngagePlayer(player.gameObject);
     }
 }
