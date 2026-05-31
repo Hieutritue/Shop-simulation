@@ -143,7 +143,8 @@ public class PlayerInteract : MonoBehaviour
         }
 
         if (target is ShelfController) return false;
-        if (target is CheckoutCounter) return true;
+        // Counter: chỉ valid khi chưa engage — đã engage thì click không có tác dụng (tránh highlight thừa).
+        if (target is CheckoutCounter counter) return !counter.IsPlayerEngaged;
         if (target is CustomerAgent) return false;
 
         if (target is ItemObject item && item.GetComponentInParent<CustomerAgent>() != null) return false;
