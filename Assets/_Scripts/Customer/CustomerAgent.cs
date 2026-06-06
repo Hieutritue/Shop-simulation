@@ -379,7 +379,7 @@ public class CustomerAgent : MonoBehaviour, IInteractable
     private bool HasArrived()
     {
         if (_ai == null) return true;
-        if (_ai.pathPending) return false;
+        if (_ai.pathPending || !_ai.hasPath) return false; // chưa có path → chưa thể "đã tới"
         return _ai.reachedEndOfPath;
     }
 
