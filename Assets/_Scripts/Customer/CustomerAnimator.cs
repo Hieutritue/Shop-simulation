@@ -13,7 +13,7 @@ using Random = UnityEngine.Random;
 /// </summary>
 public class CustomerAnimator : MonoBehaviour
 {
-    public enum Anim { Idle, Walk, Pick }
+    public enum Anim { IdleBrowse, IdleQueue, Walk, Pick }
 
     [Serializable]
     public class AnimSet
@@ -29,7 +29,8 @@ public class CustomerAnimator : MonoBehaviour
     [SerializeField]
     private List<AnimSet> _sets = new List<AnimSet>
     {
-        new AnimSet { type = Anim.Idle, loop = true },
+        new AnimSet { type = Anim.IdleBrowse, loop = true },
+        new AnimSet { type = Anim.IdleQueue, loop = true },
         new AnimSet { type = Anim.Walk, loop = true },
         new AnimSet { type = Anim.Pick, loop = false },
     };
@@ -49,7 +50,7 @@ public class CustomerAnimator : MonoBehaviour
     private Anim _current;
     private bool _currentIsLoop;
     private bool _oneShotActive;
-    private Anim _pendingLoop = Anim.Idle;
+    private Anim _pendingLoop = Anim.IdleBrowse;
 
     private void Awake()
     {
@@ -68,7 +69,7 @@ public class CustomerAnimator : MonoBehaviour
         AnimationPlayableOutput output = AnimationPlayableOutput.Create(_graph, "Anim", _animator);
         output.SetSourcePlayable(_mixer);
         _graph.Play();
-        PlayLoop(Anim.Idle);
+        PlayLoop(Anim.IdleBrowse);
     }
 
     private void OnDisable()
@@ -78,10 +79,13 @@ public class CustomerAnimator : MonoBehaviour
 
     // ───────── API cho CustomerAgent ─────────
 
-    /// <summary>Lái loco theo trạng thái di chuyển. Gọi mỗi frame cũng được (không restart thừa).</summary>
-    public void SetMoving(bool moving)
+    /// <summary>
+    /// Lái loco: đang đi → Walk; đứng yên → idle theo ngữ cảnh (idleVariant).
+    /// Gọi mỗi frame cũng được (không restart thừa).
+    /// </summary>
+    public void SetLocomotion(bool moving, Anim idleVariant)
     {
-        _pendingLoop = moving ? Anim.Walk : Anim.Idle;
+        _pendingLoop = moving ? Anim.Walk : idleVariant;
         if (!_oneShotActive) PlayLoop(_pendingLoop);
     }
 

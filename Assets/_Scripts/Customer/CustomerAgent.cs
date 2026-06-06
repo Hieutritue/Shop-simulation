@@ -149,9 +149,16 @@ public class CustomerAgent : MonoBehaviour, IInteractable
             case State.Leaving:             TickLeaving();             break;
         }
 
-        // Lái Walk/Idle theo vận tốc thực của agent.
+        // Lái Walk/Idle theo vận tốc; đứng yên thì chọn idle theo ngữ cảnh state.
         if (_anim != null && _ai != null)
-            _anim.SetMoving(_ai.velocity.sqrMagnitude > 0.04f);
+        {
+            bool moving = _ai.velocity.sqrMagnitude > 0.04f;
+            CustomerAnimator.Anim idle =
+                (_state == State.WaitInQueue || _state == State.WaitForScanAndPay)
+                    ? CustomerAnimator.Anim.IdleQueue   // đứng chờ thanh toán
+                    : CustomerAnimator.Anim.IdleBrowse; // đứng chọn đồ ở kệ
+            _anim.SetLocomotion(moving, idle);
+        }
     }
 
     // ───────── [STATE 1] SPAWN ─────────
