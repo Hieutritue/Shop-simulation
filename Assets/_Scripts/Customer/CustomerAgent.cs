@@ -15,7 +15,7 @@ using UnityEngine;
 /// </summary>
 public class CustomerAgent : MonoBehaviour, IInteractable
 {
-    private enum State { Moving, Decision, WaitInQueue, WaitForScanAndPay, Thanking, TurnToLeave, Leaving, Done }
+    private enum State { Moving, Decision, WaitInQueue, WaitForScanAndPay, Leaving, Done }
 
     [Header("Decision Stats (randomized per customer)")]
     [Tooltip("Xác suất chốt đơn khi đứng trước kệ có đồ.")]
@@ -42,10 +42,6 @@ public class CustomerAgent : MonoBehaviour, IInteractable
     [Tooltip("Tiền dư khách trả thêm (random 0..max). Player phải đưa change này.")]
     [SerializeField] private int _maxExtraPay = 30;
 
-    [Header("Leave (happy)")]
-    [Tooltip("Tốc độ quay từ từ về hướng cửa sau khi cảm ơn (độ/giây).")]
-    [SerializeField] private float _leaveTurnSpeed = 140f;
-
     [Header("Angry Throw")]
     [SerializeField] private float _throwForce = 12f;
     [SerializeField] private float _throwUpwardBias = 0.4f;
@@ -67,7 +63,6 @@ public class CustomerAgent : MonoBehaviour, IInteractable
     private float _queueToleranceTimer;
 
     private float _viewTimer;
-    private float _thanksTimer;
     private int _queueIndex = -1;
     private bool _hasPaid;
 
@@ -151,8 +146,6 @@ public class CustomerAgent : MonoBehaviour, IInteractable
             case State.Decision:            TickDecision();            break;
             case State.WaitInQueue:         TickWaitInQueue();         break;
             case State.WaitForScanAndPay:   TickWaitForScanAndPay();   break;
-            case State.Thanking:            TickThanking();            break;
-            case State.TurnToLeave:         TickTurnToLeave();         break;
             case State.Leaving:             TickLeaving();             break;
         }
 
@@ -161,9 +154,8 @@ public class CustomerAgent : MonoBehaviour, IInteractable
         {
             bool moving = _ai.velocity.sqrMagnitude > 0.04f;
             CustomerAnimator.Anim idle =
-                (_state == State.WaitInQueue || _state == State.WaitForScanAndPay
-                 || _state == State.Thanking || _state == State.TurnToLeave)
-                    ? CustomerAnimator.Anim.IdleQueue   // đứng chờ/cảm ơn ở quầy
+                (_state == State.WaitInQueue || _state == State.WaitForScanAndPay)
+                    ? CustomerAnimator.Anim.IdleQueue   // đứng chờ thanh toán
                     : CustomerAnimator.Anim.IdleBrowse; // đứng chọn đồ ở kệ
             _anim.SetLocomotion(moving, idle);
         }
@@ -226,6 +218,9 @@ public class CustomerAgent : MonoBehaviour, IInteractable
 
     private void TickDecision()
     {
+        // Quay NHANH về hướng kệ trong lúc xem đồ.
+        if (_targetShelf != null) FaceTowards(_targetShelf.transform.position, _facingTurnSpeed);
+
         _viewTimer -= Time.deltaTime;
         if (_viewTimer > 0f) return;
 
@@ -290,8 +285,9 @@ public class CustomerAgent : MonoBehaviour, IInteractable
 
     private void TickWaitInQueue()
     {
-        // Chỉ xoay về quầy khi đã đứng yên ở chỗ xếp hàng — tránh cãi rotation với AIPath lúc đang đi.
-        if (HasArrived()) FaceCounter();
+        // Khi đã tới chỗ xếp hàng: tắt rotation agent + tự xoay về quầy (tránh cãi rotation).
+        // Lúc queue dịch lên, SetDestination sẽ bật lại rotation để vừa đi vừa xoay.
+        if (HasArrived()) { SetAgentRotationControl(false); FaceCounter(); }
 
         // Sức chịu xếp hàng giảm dần khi đứng chờ "trước khi đến lượt".
         _queueToleranceTimer -= Time.deltaTime;
@@ -322,6 +318,7 @@ public class CustomerAgent : MonoBehaviour, IInteractable
     // ───────── [STATE 4] CHECKOUT — Wait for scan & pay ─────────
     private void TickWaitForScanAndPay()
     {
+        SetAgentRotationControl(false); // đứng yên ở quầy → tự xoay về quầy, không để agent tranh
         FaceCounter();
 
         var session = _checkout?.CurrentSession;
@@ -340,16 +337,16 @@ public class CustomerAgent : MonoBehaviour, IInteractable
     }
 
     // ───────── [STATE 5] LEAVING ─────────
-    // Thanh toán xong: đứng cảm ơn (anim) → quay từ từ về hướng cửa → đi ra.
+    // Thanh toán xong → đi thẳng ra cửa, vừa đi vừa quay (agent tự xoay theo path).
     public void TriggerLeaveHappy()
     {
-        if (IsLeavingFlow()) return;
-        EnterThanking();
+        if (_state == State.Leaving || _state == State.Done) return;
+        EnterLeaving();
     }
 
     public void TriggerAngryLeave()
     {
-        if (IsLeavingFlow()) return;
+        if (_state == State.Leaving || _state == State.Done) return;
         ThrowHeldItems();
         EnterLeaving();
     }
@@ -360,53 +357,26 @@ public class CustomerAgent : MonoBehaviour, IInteractable
         EnterLeaving();
     }
 
-    private bool IsLeavingFlow()
-        => _state == State.Thanking || _state == State.TurnToLeave
-           || _state == State.Leaving || _state == State.Done;
-
-    // Đứng yên chạy anim cảm ơn; xong → chuyển sang quay người.
-    private void EnterThanking()
-    {
-        _state = State.Thanking;
-        Stop();
-        SetAgentRotationControl(false); // tự quản rotation tới khi bắt đầu đi
-        _thanksTimer = _anim != null ? _anim.PlayOneShot(CustomerAnimator.Anim.Thanks) : 0f;
-        if (_thanksTimer <= 0f) EnterTurnToLeave(); // không có clip Thanks → bỏ qua, quay luôn
-    }
-
-    private void TickThanking()
-    {
-        _thanksTimer -= Time.deltaTime;
-        if (_thanksTimer <= 0f) EnterTurnToLeave();
-    }
-
-    // Quay người từ từ về hướng cửa rồi mới đi.
-    private void EnterTurnToLeave() => _state = State.TurnToLeave;
-
-    private void TickTurnToLeave()
-    {
-        if (_exitPoint == null) { EnterLeaving(); return; }
-        Vector3 dir = _exitPoint.position - transform.position;
-        dir.y = 0f;
-        if (dir.sqrMagnitude < 0.0001f) { EnterLeaving(); return; }
-
-        Quaternion target = Quaternion.LookRotation(dir);
-        transform.rotation = Quaternion.RotateTowards(transform.rotation, target, _leaveTurnSpeed * Time.deltaTime);
-        if (Quaternion.Angle(transform.rotation, target) < 5f) EnterLeaving();
-    }
-
     private void EnterLeaving()
     {
         _state = State.Leaving;
-        SetAgentRotationControl(true); // trả quyền xoay cho agent khi đi
-        if (_exitPoint != null) SetDestination(_exitPoint.position);
+        if (_exitPoint != null) SetDestination(_exitPoint.position); // SetDestination bật lại rotation agent
     }
 
     // Bật/tắt quyền tự xoay của agent (AIPath/FollowerEntity) để quay tay không bị tranh.
+    // Khi bật lại: đồng bộ facing hiện tại vào agent → không snap, rồi vừa đi vừa xoay tiếp.
     private void SetAgentRotationControl(bool enabled)
     {
-        if (_ai is Pathfinding.AIPath p) p.updateRotation = enabled;
-        else if (_ai is Pathfinding.FollowerEntity f) f.updateRotation = enabled;
+        if (_ai is Pathfinding.AIPath p)
+        {
+            if (enabled) p.rotation = transform.rotation;
+            p.updateRotation = enabled;
+        }
+        else if (_ai is Pathfinding.FollowerEntity f)
+        {
+            if (enabled) f.rotation = transform.rotation;
+            f.updateRotation = enabled;
+        }
     }
 
     private void ThrowHeldItems()
@@ -449,6 +419,7 @@ public class CustomerAgent : MonoBehaviour, IInteractable
         _ai.isStopped = false;
         _ai.destination = pos;
         _ai.SearchPath();
+        SetAgentRotationControl(true); // đang đi → agent tự xoay theo path (vừa quay vừa đi)
     }
 
     private void Stop()
@@ -458,6 +429,7 @@ public class CustomerAgent : MonoBehaviour, IInteractable
         // trong obstacle, không tới được) — đây là nguyên nhân "giật giật" khi đứng xem đồ.
         _ai.destination = transform.position;
         _ai.isStopped = true;
+        SetAgentRotationControl(false); // đứng yên → mình tự quản facing (quay tay)
     }
 
     private bool HasArrived()
@@ -469,12 +441,17 @@ public class CustomerAgent : MonoBehaviour, IInteractable
 
     private void FaceCounter()
     {
-        if (_checkout == null) return;
-        Vector3 dir = _checkout.transform.position - transform.position;
+        if (_checkout != null) FaceTowards(_checkout.transform.position, _facingTurnSpeed);
+    }
+
+    // Quay người về 1 điểm với tốc độ cho trước (độ/giây).
+    private void FaceTowards(Vector3 worldPos, float speed)
+    {
+        Vector3 dir = worldPos - transform.position;
         dir.y = 0f;
         if (dir.sqrMagnitude < 0.0001f) return;
         Quaternion target = Quaternion.LookRotation(dir);
-        transform.rotation = Quaternion.RotateTowards(transform.rotation, target, _facingTurnSpeed * Time.deltaTime);
+        transform.rotation = Quaternion.RotateTowards(transform.rotation, target, speed * Time.deltaTime);
     }
 
     private bool AllShelvesEmpty()

@@ -13,7 +13,7 @@ using Random = UnityEngine.Random;
 /// </summary>
 public class CustomerAnimator : MonoBehaviour
 {
-    public enum Anim { IdleBrowse, IdleQueue, Walk, Pick, Thanks }
+    public enum Anim { IdleBrowse, IdleQueue, Walk, Pick }
 
     [Serializable]
     public class AnimSet
@@ -33,7 +33,6 @@ public class CustomerAnimator : MonoBehaviour
         new AnimSet { type = Anim.IdleQueue, loop = true },
         new AnimSet { type = Anim.Walk, loop = true },
         new AnimSet { type = Anim.Pick, loop = false },
-        new AnimSet { type = Anim.Thanks, loop = false },
     };
 
     private Animator _animator;
@@ -90,7 +89,7 @@ public class CustomerAnimator : MonoBehaviour
         if (!_oneShotActive) PlayLoop(_pendingLoop);
     }
 
-    /// <summary>Phát one-shot (vd Pick/Thanks). Xong tự quay về loop nền. Trả về độ dài clip (giây), 0 nếu không phát được.</summary>
+    /// <summary>Phát one-shot (vd Pick). Xong tự quay về loop nền. Trả về độ dài clip (giây), 0 nếu không phát được.</summary>
     public float PlayOneShot(Anim type)
     {
         float len = PlayInternal(type);
