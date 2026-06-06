@@ -1,22 +1,35 @@
 using System.Collections.Generic;
-using System.Linq;
+using Pathfinding;
 using PrimeTween;
 using UnityEngine;
-using UnityEngine.AI;
 
 /// <summary>
-/// State machine: GoToShelf → PickItem → WaitInQueue → WaitForScanAndPay →
-/// (LeaveHappy | AngryLeave) → Done.
-/// Customer giữ items trong tay xuyên suốt; scanner gun lấy item khỏi tay.
-/// Patience hết → quăng items đang cầm về phía trước rồi bỏ về.
+/// Customer FSM theo mô hình 5 trạng thái:
+/// SPAWN → MOVING → DECISION → CHECKOUT (WaitInQueue + WaitForScanAndPay) → LEAVING.
+///
+/// Di chuyển bằng A* Pathfinding Pro (IAstarAI — AIPath/RichAI/FollowerEntity tuỳ component gắn).
+/// Mỗi khách được cấp ngẫu nhiên: xác suất mua, số lần kiên nhẫn tìm đồ, sức chịu xếp hàng, tốc độ đi.
+///
+/// Global rule: khi đang browse (chưa cầm đồ) mà toàn bộ kệ hết sạch → lập tức LEAVING.
+/// Customer giữ items trong tay xuyên suốt; scanner gun lấy item khỏi tay khi thanh toán.
 /// </summary>
-[RequireComponent(typeof(NavMeshAgent))]
 public class CustomerAgent : MonoBehaviour, IInteractable
 {
-    private enum State { GoToShelf, PickItem, WaitInQueue, WaitForScanAndPay, LeaveHappy, AngryLeave, Done }
+    private enum State { Moving, Decision, WaitInQueue, WaitForScanAndPay, Leaving, Done }
+
+    [Header("Decision Stats (randomized per customer)")]
+    [Tooltip("Xác suất chốt đơn khi đứng trước kệ có đồ.")]
+    [SerializeField] private Vector2 _buyProbabilityRange = new Vector2(0.5f, 0.9f);
+    [Tooltip("Số lần tối đa chịu đổi sang kệ khác khi hết hàng / không ưng.")]
+    [SerializeField] private Vector2Int _searchPatienceRange = new Vector2Int(1, 3);
+    [Tooltip("Thời gian (giây) tối đa chịu chờ trong hàng trước khi đến lượt.")]
+    [SerializeField] private Vector2 _queueToleranceRange = new Vector2(15f, 30f);
+    [Tooltip("Tốc độ đi (gán vào IAstarAI.maxSpeed).")]
+    [SerializeField] private Vector2 _moveSpeedRange = new Vector2(2.5f, 4f);
+    [Tooltip("Thời gian đứng xem đồ trước khi ra quyết định.")]
+    [SerializeField] private Vector2 _viewDurationRange = new Vector2(1f, 2f);
 
     [Header("Behavior")]
-    [SerializeField] private float _pickItemDuration = 1.5f;
     [SerializeField] private int _minPickCount = 1;
     [SerializeField] private int _maxPickCount = 1;
     [SerializeField] private float _facingTurnSpeed = 540f;
@@ -35,11 +48,18 @@ public class CustomerAgent : MonoBehaviour, IInteractable
     [SerializeField] private Transform _exitPoint;
     [SerializeField] private CheckoutCounter _checkout;
 
-    private NavMeshAgent _agent;
+    private IAstarAI _ai;
     private State _state;
     private ShelfController _targetShelf;
+    private ShelfController[] _allShelves;
     private readonly List<ItemObject> _heldItems = new List<ItemObject>();
-    private float _pickTimer;
+
+    // Per-customer randomized stats.
+    private float _buyProbability;
+    private int _searchPatience;
+    private float _queueToleranceTimer;
+
+    private float _viewTimer;
     private int _queueIndex = -1;
     private bool _hasPaid;
 
@@ -96,66 +116,116 @@ public class CustomerAgent : MonoBehaviour, IInteractable
 
     private void Awake()
     {
-        _agent = GetComponent<NavMeshAgent>();
+        _ai = GetComponent<IAstarAI>();
+        if (_ai == null)
+            Debug.LogError("[Customer] Thiếu component A* (AIPath/RichAI/FollowerEntity) implement IAstarAI.");
     }
 
     private void Start()
     {
-        EnterGoToShelf();
+        EnterSpawn();
     }
 
     private void Update()
     {
+        // Global rule: đang browse (chưa cầm đồ) mà hết sạch hàng → bỏ về ngay.
+        if ((_state == State.Moving || _state == State.Decision)
+            && _heldItems.Count == 0 && AllShelvesEmpty())
+        {
+            EnterLeaveSilent();
+            return;
+        }
+
         switch (_state)
         {
-            case State.GoToShelf:           TickGoToShelf();           break;
-            case State.PickItem:            TickPickItem();            break;
+            case State.Moving:              TickMoving();              break;
+            case State.Decision:            TickDecision();            break;
             case State.WaitInQueue:         TickWaitInQueue();         break;
             case State.WaitForScanAndPay:   TickWaitForScanAndPay();   break;
-            case State.LeaveHappy:          TickLeaving();             break;
-            case State.AngryLeave:          TickLeaving();             break;
+            case State.Leaving:             TickLeaving();             break;
         }
     }
 
-    // ───────── Shelf ─────────
-    private void EnterGoToShelf()
+    // ───────── [STATE 1] SPAWN ─────────
+    private void EnterSpawn()
     {
-        _state = State.GoToShelf;
-        _targetShelf = FindStockedShelf();
-        if (_targetShelf == null) { EnterAngryLeaveSilent(); return; }
-        _agent.SetDestination(_targetShelf.transform.position);
+        // Cấp ngẫu nhiên các chỉ số ra quyết định.
+        _buyProbability = Random.Range(_buyProbabilityRange.x, _buyProbabilityRange.y);
+        _searchPatience = Random.Range(_searchPatienceRange.x, _searchPatienceRange.y + 1);
+        _queueToleranceTimer = Random.Range(_queueToleranceRange.x, _queueToleranceRange.y);
+        if (_ai != null) _ai.maxSpeed = Random.Range(_moveSpeedRange.x, _moveSpeedRange.y);
+
+        _allShelves = Object.FindObjectsByType<ShelfController>(FindObjectsSortMode.None);
+
+        // Chọn ngẫu nhiên 1 kệ có đồ → MOVING.
+        _targetShelf = FindStockedShelf(null);
+        if (_targetShelf == null) { EnterLeaveSilent(); return; }
+        EnterMoving();
     }
 
-    private void TickGoToShelf()
+    // ───────── [STATE 2] MOVING ─────────
+    private void EnterMoving()
     {
-        if (_targetShelf == null || _targetShelf.IsEmpty()) { EnterGoToShelf(); return; }
-        if (HasArrived()) EnterPickItem();
+        _state = State.Moving;
+        SetDestination(_targetShelf.transform.position);
     }
 
-    private void EnterPickItem()
+    private void TickMoving()
     {
-        _state = State.PickItem;
-        _pickTimer = _pickItemDuration;
-        _agent.ResetPath();
-    }
-
-    private void TickPickItem()
-    {
-        _pickTimer -= Time.deltaTime;
-        if (_pickTimer > 0f) return;
-
-        int want = Random.Range(_minPickCount, _maxPickCount + 1);
-        for (int i = 0; i < want; i++)
+        if (_targetShelf == null || _targetShelf.IsEmpty())
         {
-            if (_targetShelf == null || _targetShelf.IsEmpty()) break;
-            ItemObject taken = _targetShelf.TakeItem();
-            if (taken == null) break;
-            AttachItemToHand(taken, _heldItems.Count);
-            _heldItems.Add(taken);
+            // Kệ mục tiêu vừa hết — chọn kệ khác có đồ.
+            _targetShelf = FindStockedShelf(_targetShelf);
+            if (_targetShelf == null) { EnterLeaveSilent(); return; }
+            SetDestination(_targetShelf.transform.position);
+            return;
         }
 
-        if (_heldItems.Count > 0) EnterWaitInQueue();
-        else EnterAngryLeaveSilent();
+        // Đến sát kệ → đứng xem đồ 1-2s rồi DECISION.
+        if (HasArrived()) EnterDecision();
+    }
+
+    // ───────── [STATE 3] DECISION ─────────
+    private void EnterDecision()
+    {
+        _state = State.Decision;
+        _viewTimer = Random.Range(_viewDurationRange.x, _viewDurationRange.y);
+        Stop();
+    }
+
+    private void TickDecision()
+    {
+        _viewTimer -= Time.deltaTime;
+        if (_viewTimer > 0f) return;
+
+        bool shelfHasItem = _targetShelf != null && !_targetShelf.IsEmpty();
+
+        // Kệ có đồ VÀ random trúng xác suất mua → nhặt đồ → CHECKOUT.
+        if (shelfHasItem && Random.value <= _buyProbability)
+        {
+            int want = Random.Range(_minPickCount, _maxPickCount + 1);
+            for (int i = 0; i < want; i++)
+            {
+                if (_targetShelf == null || _targetShelf.IsEmpty()) break;
+                ItemObject taken = _targetShelf.TakeItem();
+                if (taken == null) break;
+                AttachItemToHand(taken, _heldItems.Count);
+                _heldItems.Add(taken);
+            }
+
+            if (_heldItems.Count > 0) { EnterWaitInQueue(); return; }
+        }
+
+        // Kệ trống HOẶC random trượt → trừ 1 lần kiên nhẫn.
+        _searchPatience--;
+        if (_searchPatience > 0)
+        {
+            ShelfController next = FindStockedShelf(_targetShelf);
+            if (next != null) { _targetShelf = next; EnterMoving(); return; }
+        }
+
+        // Hết kiên nhẫn (hoặc không còn kệ nào có đồ) → thất vọng, bỏ về.
+        EnterLeaveSilent();
     }
 
     private void AttachItemToHand(ItemObject item, int stackIndex)
@@ -171,11 +241,11 @@ public class CustomerAgent : MonoBehaviour, IInteractable
         item.transform.localRotation = Quaternion.identity;
     }
 
-    // ───────── Queue ─────────
+    // ───────── [STATE 4] CHECKOUT — Queue ─────────
     private void EnterWaitInQueue()
     {
         if (_checkout == null) _checkout = Object.FindFirstObjectByType<CheckoutCounter>();
-        if (_checkout == null) { EnterAngryLeaveSilent(); return; }
+        if (_checkout == null) { EnterLeaveSilent(); return; }
 
         _state = State.WaitInQueue;
         _queueIndex = _checkout.JoinQueue(this);
@@ -185,6 +255,11 @@ public class CustomerAgent : MonoBehaviour, IInteractable
     private void TickWaitInQueue()
     {
         FaceCounter();
+
+        // Sức chịu xếp hàng giảm dần khi đứng chờ "trước khi đến lượt".
+        _queueToleranceTimer -= Time.deltaTime;
+        if (_queueToleranceTimer <= 0f) { TriggerAngryLeave(); return; }
+
         if (_queueIndex != 0 || !HasArrived()) return;
         if (_checkout == null || _checkout.ActiveCustomer != null) return;
 
@@ -198,7 +273,7 @@ public class CustomerAgent : MonoBehaviour, IInteractable
     private void MoveToQueueSpot()
     {
         Transform spot = _checkout != null ? _checkout.GetQueuePosition(_queueIndex) : null;
-        if (spot != null) _agent.SetDestination(spot.position);
+        if (spot != null) SetDestination(spot.position);
     }
 
     public void OnQueuePositionChanged(int newIndex)
@@ -207,7 +282,7 @@ public class CustomerAgent : MonoBehaviour, IInteractable
         if (_state == State.WaitInQueue) MoveToQueueSpot();
     }
 
-    // ───────── Wait for scan & pay ─────────
+    // ───────── [STATE 4] CHECKOUT — Wait for scan & pay ─────────
     private void TickWaitForScanAndPay()
     {
         FaceCounter();
@@ -227,27 +302,30 @@ public class CustomerAgent : MonoBehaviour, IInteractable
         // session.IsComplete → counter sẽ gọi TriggerLeaveHappy() lên customer này.
     }
 
-    // ───────── Leave (happy / angry) ─────────
+    // ───────── [STATE 5] LEAVING ─────────
     public void TriggerLeaveHappy()
     {
-        if (_state == State.LeaveHappy || _state == State.AngryLeave || _state == State.Done) return;
-        _state = State.LeaveHappy;
-        if (_exitPoint != null) _agent.SetDestination(_exitPoint.position);
+        if (_state == State.Leaving || _state == State.Done) return;
+        EnterLeaving();
     }
 
     public void TriggerAngryLeave()
     {
-        if (_state == State.AngryLeave || _state == State.Done) return;
+        if (_state == State.Leaving || _state == State.Done) return;
         ThrowHeldItems();
-        _state = State.AngryLeave;
-        if (_exitPoint != null) _agent.SetDestination(_exitPoint.position);
+        EnterLeaving();
     }
 
-    private void EnterAngryLeaveSilent()
+    private void EnterLeaveSilent()
     {
-        // Edge case: không vào được flow checkout (no shelf, no exit) → bỏ về không quăng.
-        _state = State.AngryLeave;
-        if (_exitPoint != null) _agent.SetDestination(_exitPoint.position);
+        // Browse-leave: chưa cầm đồ (hết hàng / thất vọng) → bỏ về không quăng.
+        EnterLeaving();
+    }
+
+    private void EnterLeaving()
+    {
+        _state = State.Leaving;
+        if (_exitPoint != null) SetDestination(_exitPoint.position);
     }
 
     private void ThrowHeldItems()
@@ -284,6 +362,27 @@ public class CustomerAgent : MonoBehaviour, IInteractable
     }
 
     // ───────── Helpers ─────────
+    private void SetDestination(Vector3 pos)
+    {
+        if (_ai == null) return;
+        _ai.isStopped = false;
+        _ai.destination = pos;
+        _ai.SearchPath();
+    }
+
+    private void Stop()
+    {
+        if (_ai == null) return;
+        _ai.isStopped = true;
+    }
+
+    private bool HasArrived()
+    {
+        if (_ai == null) return true;
+        if (_ai.pathPending) return false;
+        return _ai.reachedEndOfPath;
+    }
+
     private void FaceCounter()
     {
         if (_checkout == null) return;
@@ -294,18 +393,23 @@ public class CustomerAgent : MonoBehaviour, IInteractable
         transform.rotation = Quaternion.RotateTowards(transform.rotation, target, _facingTurnSpeed * Time.deltaTime);
     }
 
-    private bool HasArrived()
+    private bool AllShelvesEmpty()
     {
-        if (_agent.pathPending) return false;
-        return _agent.remainingDistance <= _agent.stoppingDistance + 0.1f;
+        if (_allShelves == null) return false;
+        foreach (var s in _allShelves)
+            if (s != null && !s.IsEmpty()) return false;
+        return true;
     }
 
-    private ShelfController FindStockedShelf()
+    private ShelfController FindStockedShelf(ShelfController exclude)
     {
-        ShelfController[] shelves = Object.FindObjectsByType<ShelfController>(FindObjectsSortMode.None);
+        if (_allShelves == null) return null;
         List<ShelfController> stocked = new List<ShelfController>();
-        foreach (var s in shelves)
-            if (!s.IsEmpty()) stocked.Add(s);
+        foreach (var s in _allShelves)
+            if (s != null && s != exclude && !s.IsEmpty()) stocked.Add(s);
+
+        // Nếu chỉ còn đúng kệ exclude có đồ thì vẫn cho phép chọn lại nó.
+        if (stocked.Count == 0 && exclude != null && !exclude.IsEmpty()) return exclude;
         if (stocked.Count == 0) return null;
         return stocked[Random.Range(0, stocked.Count)];
     }
