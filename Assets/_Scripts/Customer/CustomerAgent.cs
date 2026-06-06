@@ -34,6 +34,11 @@ public class CustomerAgent : MonoBehaviour, IInteractable
     [SerializeField] private int _maxPickCount = 1;
     [Tooltip("Khoảng cách dừng trước kệ (đứng trên nền trống, tránh kẹt mép obstacle).")]
     [SerializeField] private float _shelfStopDistance = 1.5f;
+    [Tooltip("Bán kính tản ngẫu nhiên quanh kệ để nhiều khách không chụm 1 điểm.")]
+    [SerializeField] private float _browseSpread = 0.9f;
+    [Tooltip("Tốc độ xoay theo hướng đi khi đang di chuyển (độ/giây) — vừa đi vừa quay.")]
+    [SerializeField] private float _moveTurnSpeed = 360f;
+    [Tooltip("Tốc độ xoay nhanh về kệ/quầy khi đứng yên (độ/giây).")]
     [SerializeField] private float _facingTurnSpeed = 540f;
     [SerializeField] private Transform _hand;
     [SerializeField] private float _handStackOffsetY = 0.15f;
@@ -63,6 +68,7 @@ public class CustomerAgent : MonoBehaviour, IInteractable
     private float _queueToleranceTimer;
 
     private float _viewTimer;
+    private Vector3 _browseOffset;
     private int _queueIndex = -1;
     private bool _hasPaid;
 
@@ -127,6 +133,12 @@ public class CustomerAgent : MonoBehaviour, IInteractable
 
     private void Start()
     {
+        // Cấu hình agent (entity FollowerEntity đã tồn tại sau OnEnable):
+        // - Tắt tự xoay → rotation do mình quản hết (tránh snap on-spot 720°/s).
+        // - Bật né nhau (RVO) để nhiều khách không chụm/đè lên nhau.
+        SetAgentRotationControl(false);
+        if (_ai is Pathfinding.FollowerEntity fe) fe.enableLocalAvoidance = true;
+
         EnterSpawn();
     }
 
@@ -159,6 +171,8 @@ public class CustomerAgent : MonoBehaviour, IInteractable
                     : CustomerAnimator.Anim.IdleBrowse; // đứng chọn đồ ở kệ
             _anim.SetLocomotion(moving, idle);
         }
+
+        UpdateFacing();
     }
 
     // ───────── [STATE 1] SPAWN ─────────
@@ -169,6 +183,10 @@ public class CustomerAgent : MonoBehaviour, IInteractable
         _searchPatience = Random.Range(_searchPatienceRange.x, _searchPatienceRange.y + 1);
         _queueToleranceTimer = Random.Range(_queueToleranceRange.x, _queueToleranceRange.y);
         if (_ai != null) _ai.maxSpeed = Random.Range(_moveSpeedRange.x, _moveSpeedRange.y);
+
+        // Offset tản quanh kệ (cố định theo khách) → không chụm 1 điểm.
+        Vector2 o = Random.insideUnitCircle * _browseSpread;
+        _browseOffset = new Vector3(o.x, 0f, o.y);
 
         _allShelves = Object.FindObjectsByType<ShelfController>(FindObjectsSortMode.None);
 
@@ -182,7 +200,7 @@ public class CustomerAgent : MonoBehaviour, IInteractable
     private void EnterMoving()
     {
         _state = State.Moving;
-        SetDestination(_targetShelf.transform.position);
+        SetDestination(ShelfTarget());
     }
 
     private void TickMoving()
@@ -192,7 +210,7 @@ public class CustomerAgent : MonoBehaviour, IInteractable
             // Kệ mục tiêu vừa hết — chọn kệ khác có đồ.
             _targetShelf = FindStockedShelf(_targetShelf);
             if (_targetShelf == null) { EnterLeaveSilent(); return; }
-            SetDestination(_targetShelf.transform.position);
+            SetDestination(ShelfTarget());
             return;
         }
 
@@ -200,11 +218,15 @@ public class CustomerAgent : MonoBehaviour, IInteractable
         if (HasArrived() || CloseToShelf()) EnterDecision();
     }
 
+    // Điểm đứng trước kệ = tâm kệ + offset tản (mỗi khách 1 chỗ).
+    private Vector3 ShelfTarget()
+        => _targetShelf != null ? _targetShelf.transform.position + _browseOffset : transform.position;
+
     private bool CloseToShelf()
     {
         if (_targetShelf == null) return false;
         Vector3 a = transform.position; a.y = 0f;
-        Vector3 b = _targetShelf.transform.position; b.y = 0f;
+        Vector3 b = ShelfTarget(); b.y = 0f;
         return (a - b).sqrMagnitude <= _shelfStopDistance * _shelfStopDistance;
     }
 
@@ -218,9 +240,7 @@ public class CustomerAgent : MonoBehaviour, IInteractable
 
     private void TickDecision()
     {
-        // Quay NHANH về hướng kệ trong lúc xem đồ.
-        if (_targetShelf != null) FaceTowards(_targetShelf.transform.position, _facingTurnSpeed);
-
+        // Facing về kệ do UpdateFacing() lo (đứng yên → quay nhanh về kệ).
         _viewTimer -= Time.deltaTime;
         if (_viewTimer > 0f) return;
 
@@ -285,10 +305,7 @@ public class CustomerAgent : MonoBehaviour, IInteractable
 
     private void TickWaitInQueue()
     {
-        // Khi đã tới chỗ xếp hàng: tắt rotation agent + tự xoay về quầy (tránh cãi rotation).
-        // Lúc queue dịch lên, SetDestination sẽ bật lại rotation để vừa đi vừa xoay.
-        if (HasArrived()) { SetAgentRotationControl(false); FaceCounter(); }
-
+        // Facing về quầy do UpdateFacing() lo.
         // Sức chịu xếp hàng giảm dần khi đứng chờ "trước khi đến lượt".
         _queueToleranceTimer -= Time.deltaTime;
         if (_queueToleranceTimer <= 0f) { TriggerAngryLeave(); return; }
@@ -318,9 +335,7 @@ public class CustomerAgent : MonoBehaviour, IInteractable
     // ───────── [STATE 4] CHECKOUT — Wait for scan & pay ─────────
     private void TickWaitForScanAndPay()
     {
-        SetAgentRotationControl(false); // đứng yên ở quầy → tự xoay về quầy, không để agent tranh
-        FaceCounter();
-
+        // Facing về quầy do UpdateFacing() lo.
         var session = _checkout?.CurrentSession;
         if (session == null) return;
 
@@ -360,23 +375,14 @@ public class CustomerAgent : MonoBehaviour, IInteractable
     private void EnterLeaving()
     {
         _state = State.Leaving;
-        if (_exitPoint != null) SetDestination(_exitPoint.position); // SetDestination bật lại rotation agent
+        if (_exitPoint != null) SetDestination(_exitPoint.position);
     }
 
-    // Bật/tắt quyền tự xoay của agent (AIPath/FollowerEntity) để quay tay không bị tranh.
-    // Khi bật lại: đồng bộ facing hiện tại vào agent → không snap, rồi vừa đi vừa xoay tiếp.
+    // Tắt quyền tự xoay của agent (gọi 1 lần lúc Awake) — rotation do mình quản hết.
     private void SetAgentRotationControl(bool enabled)
     {
-        if (_ai is Pathfinding.AIPath p)
-        {
-            if (enabled) p.rotation = transform.rotation;
-            p.updateRotation = enabled;
-        }
-        else if (_ai is Pathfinding.FollowerEntity f)
-        {
-            if (enabled) f.rotation = transform.rotation;
-            f.updateRotation = enabled;
-        }
+        if (_ai is Pathfinding.AIPath p) p.updateRotation = enabled;
+        else if (_ai is Pathfinding.FollowerEntity f) f.updateRotation = enabled;
     }
 
     private void ThrowHeldItems()
@@ -419,7 +425,6 @@ public class CustomerAgent : MonoBehaviour, IInteractable
         _ai.isStopped = false;
         _ai.destination = pos;
         _ai.SearchPath();
-        SetAgentRotationControl(true); // đang đi → agent tự xoay theo path (vừa quay vừa đi)
     }
 
     private void Stop()
@@ -429,7 +434,6 @@ public class CustomerAgent : MonoBehaviour, IInteractable
         // trong obstacle, không tới được) — đây là nguyên nhân "giật giật" khi đứng xem đồ.
         _ai.destination = transform.position;
         _ai.isStopped = true;
-        SetAgentRotationControl(false); // đứng yên → mình tự quản facing (quay tay)
     }
 
     private bool HasArrived()
@@ -439,15 +443,43 @@ public class CustomerAgent : MonoBehaviour, IInteractable
         return _ai.reachedEndOfPath;
     }
 
-    private void FaceCounter()
+    // Quản facing mỗi frame (agent không tự xoay): đang đi → quay theo hướng đi (mượt);
+    // đứng yên → quay nhanh về kệ (Decision) hoặc quầy (queue/scan).
+    private void UpdateFacing()
     {
-        if (_checkout != null) FaceTowards(_checkout.transform.position, _facingTurnSpeed);
+        Vector3 move = MoveDirection();
+        if (move.sqrMagnitude > 0.02f)
+        {
+            FaceDir(move, _moveTurnSpeed); // vừa đi vừa quay, không snap
+            return;
+        }
+
+        if (_state == State.Decision && _targetShelf != null)
+            FaceTowards(_targetShelf.transform.position, _facingTurnSpeed);
+        else if ((_state == State.WaitInQueue || _state == State.WaitForScanAndPay) && _checkout != null)
+            FaceTowards(_checkout.transform.position, _facingTurnSpeed);
     }
 
-    // Quay người về 1 điểm với tốc độ cho trước (độ/giây).
-    private void FaceTowards(Vector3 worldPos, float speed)
+    // Hướng di chuyển: ưu tiên desiredVelocity (FollowerEntity, có ngay cả khi mới khởi động),
+    // fallback velocity thực.
+    private Vector3 MoveDirection()
     {
-        Vector3 dir = worldPos - transform.position;
+        if (_ai == null) return Vector3.zero;
+        Vector3 v = _ai.velocity;
+        if (_ai is Pathfinding.FollowerEntity f)
+        {
+            Vector3 d = f.desiredVelocity;
+            if (d.sqrMagnitude > 0.01f) v = d;
+        }
+        v.y = 0f;
+        return v;
+    }
+
+    private void FaceTowards(Vector3 worldPos, float speed) => FaceDir(worldPos - transform.position, speed);
+
+    // Quay người về 1 hướng với tốc độ cho trước (độ/giây).
+    private void FaceDir(Vector3 dir, float speed)
+    {
         dir.y = 0f;
         if (dir.sqrMagnitude < 0.0001f) return;
         Quaternion target = Quaternion.LookRotation(dir);
