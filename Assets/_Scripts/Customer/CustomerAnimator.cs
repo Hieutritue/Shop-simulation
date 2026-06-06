@@ -13,7 +13,7 @@ using Random = UnityEngine.Random;
 /// </summary>
 public class CustomerAnimator : MonoBehaviour
 {
-    public enum Anim { IdleBrowse, IdleQueue, Walk, Pick }
+    public enum Anim { IdleBrowse, IdleQueue, Walk, Pick, Thanks }
 
     [Serializable]
     public class AnimSet
@@ -33,6 +33,7 @@ public class CustomerAnimator : MonoBehaviour
         new AnimSet { type = Anim.IdleQueue, loop = true },
         new AnimSet { type = Anim.Walk, loop = true },
         new AnimSet { type = Anim.Pick, loop = false },
+        new AnimSet { type = Anim.Thanks, loop = false },
     };
 
     private Animator _animator;
@@ -89,10 +90,12 @@ public class CustomerAnimator : MonoBehaviour
         if (!_oneShotActive) PlayLoop(_pendingLoop);
     }
 
-    /// <summary>Phát one-shot (vd Pick). Xong tự quay về loop nền hiện tại.</summary>
-    public void PlayOneShot(Anim type)
+    /// <summary>Phát one-shot (vd Pick/Thanks). Xong tự quay về loop nền. Trả về độ dài clip (giây), 0 nếu không phát được.</summary>
+    public float PlayOneShot(Anim type)
     {
-        if (PlayInternal(type)) _oneShotActive = true;
+        float len = PlayInternal(type);
+        if (len > 0f) _oneShotActive = true;
+        return len;
     }
 
     // ───────── Nội bộ ─────────
@@ -103,12 +106,12 @@ public class CustomerAnimator : MonoBehaviour
         PlayInternal(type);
     }
 
-    private bool PlayInternal(Anim type)
+    private float PlayInternal(Anim type)
     {
-        if (!_graph.IsValid()) return false;
-        if (!_map.TryGetValue(type, out var set) || set.clips == null || set.clips.Length == 0) return false;
+        if (!_graph.IsValid()) return 0f;
+        if (!_map.TryGetValue(type, out var set) || set.clips == null || set.clips.Length == 0) return 0f;
         AnimationClip clip = set.clips[Random.Range(0, set.clips.Length)];
-        if (clip == null) return false;
+        if (clip == null) return 0f;
 
         FinishBlendImmediate(); // snap blend dở (nếu có) trước khi mở blend mới
 
@@ -127,7 +130,7 @@ public class CustomerAnimator : MonoBehaviour
         _current = type;
         _currentIsLoop = set.loop;
         _hasCurrent = true;
-        return true;
+        return clip.length;
     }
 
     private void Update()
