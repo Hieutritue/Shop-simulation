@@ -32,6 +32,8 @@ public class CustomerAgent : MonoBehaviour, IInteractable
     [Header("Behavior")]
     [SerializeField] private int _minPickCount = 1;
     [SerializeField] private int _maxPickCount = 1;
+    [Tooltip("Khoảng cách dừng trước kệ (đứng trên nền trống, tránh kẹt mép obstacle).")]
+    [SerializeField] private float _shelfStopDistance = 1.5f;
     [SerializeField] private float _facingTurnSpeed = 540f;
     [SerializeField] private Transform _hand;
     [SerializeField] private float _handStackOffsetY = 0.15f;
@@ -181,8 +183,16 @@ public class CustomerAgent : MonoBehaviour, IInteractable
             return;
         }
 
-        // Đến sát kệ → đứng xem đồ 1-2s rồi DECISION.
-        if (HasArrived()) EnterDecision();
+        // Đến gần kệ (nền trống) hoặc tới cuối path → đứng xem đồ 1-2s rồi DECISION.
+        if (HasArrived() || CloseToShelf()) EnterDecision();
+    }
+
+    private bool CloseToShelf()
+    {
+        if (_targetShelf == null) return false;
+        Vector3 a = transform.position; a.y = 0f;
+        Vector3 b = _targetShelf.transform.position; b.y = 0f;
+        return (a - b).sqrMagnitude <= _shelfStopDistance * _shelfStopDistance;
     }
 
     // ───────── [STATE 3] DECISION ─────────
@@ -254,7 +264,8 @@ public class CustomerAgent : MonoBehaviour, IInteractable
 
     private void TickWaitInQueue()
     {
-        FaceCounter();
+        // Chỉ xoay về quầy khi đã đứng yên ở chỗ xếp hàng — tránh cãi rotation với AIPath lúc đang đi.
+        if (HasArrived()) FaceCounter();
 
         // Sức chịu xếp hàng giảm dần khi đứng chờ "trước khi đến lượt".
         _queueToleranceTimer -= Time.deltaTime;
@@ -373,6 +384,9 @@ public class CustomerAgent : MonoBehaviour, IInteractable
     private void Stop()
     {
         if (_ai == null) return;
+        // destination = vị trí hiện tại → AIPath ngừng repath/steer về mục tiêu cũ (tâm kệ nằm
+        // trong obstacle, không tới được) — đây là nguyên nhân "giật giật" khi đứng xem đồ.
+        _ai.destination = transform.position;
         _ai.isStopped = true;
     }
 
