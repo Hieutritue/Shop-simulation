@@ -51,6 +51,7 @@ public class CustomerAgent : MonoBehaviour, IInteractable
     [SerializeField] private CheckoutCounter _checkout;
 
     private IAstarAI _ai;
+    private CustomerAnimator _anim;
     private State _state;
     private ShelfController _targetShelf;
     private ShelfController[] _allShelves;
@@ -121,6 +122,7 @@ public class CustomerAgent : MonoBehaviour, IInteractable
         _ai = GetComponent<IAstarAI>();
         if (_ai == null)
             Debug.LogError("[Customer] Thiếu component A* (AIPath/RichAI/FollowerEntity) implement IAstarAI.");
+        _anim = GetComponentInChildren<CustomerAnimator>();
     }
 
     private void Start()
@@ -146,6 +148,10 @@ public class CustomerAgent : MonoBehaviour, IInteractable
             case State.WaitForScanAndPay:   TickWaitForScanAndPay();   break;
             case State.Leaving:             TickLeaving();             break;
         }
+
+        // Lái Walk/Idle theo vận tốc thực của agent.
+        if (_anim != null && _ai != null)
+            _anim.SetMoving(_ai.velocity.sqrMagnitude > 0.04f);
     }
 
     // ───────── [STATE 1] SPAWN ─────────
@@ -223,7 +229,12 @@ public class CustomerAgent : MonoBehaviour, IInteractable
                 _heldItems.Add(taken);
             }
 
-            if (_heldItems.Count > 0) { EnterWaitInQueue(); return; }
+            if (_heldItems.Count > 0)
+            {
+                _anim?.PlayOneShot(CustomerAnimator.Anim.Pick);
+                EnterWaitInQueue();
+                return;
+            }
         }
 
         // Kệ trống HOẶC random trượt → trừ 1 lần kiên nhẫn.
